@@ -1,0 +1,19 @@
+{
+  "name": "vesktop-macrodeck-bridge",
+  "version": "1.0.0",
+  "description": "Vesktop/Vencord client plugin — local bridge to Macro Deck (protocol v1.0.0). Connects to 127.0.0.1:8323, never exposes credentials.",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "mock-bridge": "node mock-bridge/mockBridge.js",
+    "mock-bridge:test": "node mock-bridge/mockBridge.js --selftest",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "ws": "^8.17.0"
+  }
+}

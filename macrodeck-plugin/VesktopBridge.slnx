@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VesktopBridge.Core/VesktopBridge.Core.csproj" />
+    <Project Path="src/VesktopBridge.Plugin/VesktopBridge.Plugin.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BridgeInterop/BridgeInterop.csproj" />
+    <Project Path="tests/BridgeSmoke/BridgeSmoke.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# Build outputs
+# ---------------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+artifacts/
+dist/
+*.macroDeckPlugin
+
+# ---------------------------------------------------------------------------
+# Node / TypeScript tooling (restored from package.json, never committed)
+# ---------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Build dependency: a Vencord checkout is cloned locally, never committed.
+# See "Building the Vesktop client plugin" in README.md.
+# ---------------------------------------------------------------------------
+/Vencord/
+
+# ---------------------------------------------------------------------------
+# Editors / IDE
+# ---------------------------------------------------------------------------
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ---------------------------------------------------------------------------
+# Local secrets and logs. The Macro Deck bridge token lives OUTSIDE the repo
+# (%AppData%/DeckBridge/settings.json) - never let one land in here.
+# ---------------------------------------------------------------------------
+.env
+*.local
+*.log
+settings.json
+!src/**/settings.json
