@@ -6,6 +6,9 @@
 *.cmd   text eol=crlf
 *.bat   text eol=crlf
 
+# Shell scripts must keep LF everywhere - CRLF breaks the #! line on Linux.
+*.sh    text eol=lf
+
 # Binary assets - never touch these.
 *.png   binary
 *.jpg   binary

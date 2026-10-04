@@ -36,18 +36,31 @@ plugin is the **client**. Nothing leaves your machine.
 ## Setup (read this first)
 
 You need **both halves** on the **same PC** (everything is localhost-only).
-The fastest path is the setup script (Windows PowerShell):
+The fastest path is the setup script (Windows PowerShell, or bash on Linux):
 
 ```powershell
-# from the repository root:
+# Windows, from the repository root:
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+```bash
+# Linux, from the repository root:
+chmod +x setup.sh && ./setup.sh
 ```
 
 What it does: checks prerequisites (Git, Node, pnpm, .NET 10 SDK),
 builds the Macro Deck plugin, clones Vencord at the matching rev (if needed),
 copies in the `MacroDeckBridge` userplugin, builds it, deploys it to Vesktop,
-points Vesktop at the build, and restarts Vesktop. Re-run
-`.\setup.ps1 -CheckOnly` any time to verify the install without changing anything.
+points Vesktop at the build, and restarts Vesktop. Re-run with `-CheckOnly`
+(`--check-only` on Linux) any time to verify the install without changing anything.
+
+> **Linux is untested: NOT TESTED ON LINUX — ONLY TESTED ON WINDOWS 11.**
+> `setup.sh` / `watch-vesktop-vencord.sh` mirror the tested Windows scripts,
+> but no one has run them end-to-end on Linux yet. Two known caveats: if
+> Vesktop is installed as a Flatpak, the sandbox may hide the custom Vencord
+> dir (the script warns and you may need a filesystem override); and the
+> watchdog registers a systemd user timer, falling back to a printed cron line
+> where systemd is unavailable.
 
 Prefer manual steps? They are below. Either way, finish with **pairing**
 (step 3) — without it, buttons report `NOT_CONNECTED`.

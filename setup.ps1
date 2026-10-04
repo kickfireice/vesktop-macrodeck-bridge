@@ -47,13 +47,16 @@ param(
 $ErrorActionPreference = "Stop"
 
 # $PSScriptRoot is not available in param() defaults on Windows PowerShell 5.1.
-if (-not $VencordDir) { $VencordDir = Join-Path $PSScriptRoot "Vencord" }
+# Fall back to the launch directory if it is ever empty (e.g. pasted into a console).
+$RepoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+if (-not $VencordDir) { $VencordDir = Join-Path $RepoRoot "Vencord" }
 if (-not $Target) { $Target = Join-Path $env:APPDATA "vesktop\vencord" }
 
-$RepoPluginSrc = Join-Path $PSScriptRoot "vesktop-plugin\userplugins\MacroDeckBridge"
-$MacroDeckDir = Join-Path $PSScriptRoot "macrodeck-plugin"
-$WatchScript = Join-Path $PSScriptRoot "vesktop-plugin\tools\watch-vesktop-vencord.ps1"
+$RepoPluginSrc = Join-Path $RepoRoot "vesktop-plugin\userplugins\MacroDeckBridge"
+$MacroDeckDir = Join-Path $RepoRoot "macrodeck-plugin"
+$WatchScript = Join-Path $RepoRoot "vesktop-plugin\tools\watch-vesktop-vencord.ps1"
 $VesktopExe = Join-Path $env:LOCALAPPDATA "vesktop\vesktop.exe"
+$MacroDeckExe = Join-Path $env:LOCALAPPDATA "Macro Deck\MacroDeck.exe"
 $VencordRepoUrl = "https://github.com/Vendicated/Vencord.git"
 
 $DistFiles = @(
@@ -102,15 +105,36 @@ function Test-Prereqs {
     $ok = $true
     foreach ($cmd in @("git", "node", "pnpm")) {
         if (HaveCommand $cmd) { Say "  [ok] $cmd" }
+        elseif ($cmd -eq "pnpm") { Fail "Missing required tool: pnpm (try: corepack enable)"; $ok = $false }
         else { Fail "Missing required tool: $cmd"; $ok = $false }
     }
     if (-not $SkipMacroDeck) {
-        if (HaveCommand "dotnet") { Say "  [ok] dotnet" }
-        else { Fail "Missing required tool: dotnet (.NET SDK)"; $ok = $false }
+        if (HaveCommand "dotnet") {
+            Say "  [ok] dotnet"
+            try {
+                $ver = (& dotnet --version 2>$null).Trim()
+                $major = ([version]$ver.Split("-")[0]).Major
+                if ($major -lt 10) { Fail "dotnet SDK $ver is too old - need .NET 10 SDK or newer."; $ok = $false }
+                else { Say "  [ok] dotnet $ver" }
+            } catch { Say "  [warn] cannot read dotnet version - continuing." }
+        }
+        else { Fail "Missing required tool: dotnet (.NET 10 SDK from https://dotnet.microsoft.com/download)"; $ok = $false }
     }
+    try {
+        $nodeVer = (& node --version 2>$null).Trim().TrimStart("v")
+        $nodeMajor = ([version]$nodeVer).Major
+        if ($nodeMajor -lt 22) { Fail "node $nodeVer is too old - need Node.js 22 or newer."; $ok = $false }
+        else { Say "  [ok] node v$nodeVer" }
+    } catch { Fail "Cannot read node version."; $ok = $false }
     if (-not (Test-Path $RepoPluginSrc)) {
         Fail "Plugin source missing: $RepoPluginSrc"
         $ok = $false
+    }
+    if ((-not (Test-Path $VesktopExe)) -and (-not (Get-Process vesktop -ErrorAction SilentlyContinue))) {
+        Say "  [warn] Vesktop not found - install it before the Vesktop half can deploy."
+    }
+    if ((-not (Test-Path $MacroDeckExe)) -and (-not (Get-Process MacroDeck* -ErrorAction SilentlyContinue))) {
+        Say "  [warn] Macro Deck 3 not found - install it before the server half can run."
     }
     return $ok
 }
@@ -183,7 +207,7 @@ function Invoke-CheckOnly {
 if ($CheckOnly) { Invoke-CheckOnly }
 
 Say "=== Vesktop Bridge setup ==="
-Say "Repo:   $PSScriptRoot"
+Say "Repo:   $RepoRoot"
 Say "Vencord rev: $VencordRev"
 Say "-- prerequisites --"
 if (-not (Test-Prereqs)) { throw "Prerequisites missing (see warnings above). Install them and re-run." }
