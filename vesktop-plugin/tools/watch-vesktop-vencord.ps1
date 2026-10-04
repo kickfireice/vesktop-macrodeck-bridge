@@ -47,10 +47,15 @@ if ($Unregister) {
 }
 
 if ($Register) {
-    $arg = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    schtasks /create /tn $taskName /sc MINUTE /mo 5 /tr "powershell.exe $arg" /f | Out-Null
+    # Launch via wscript + run-hidden.vbs (both windowless). A direct
+    # powershell.exe task action flashes a console window every run because
+    # conhost appears before -WindowStyle Hidden applies.
+    $vbs = Join-Path $PSScriptRoot "run-hidden.vbs"
+    if (-not (Test-Path $vbs)) { throw "run-hidden.vbs missing next to $PSCommandPath" }
+    $arg = 'wscript.exe "' + $vbs + '"'
+    schtasks /create /tn $taskName /sc MINUTE /mo 5 /tr "$arg" /f | Out-Null
     schtasks /run /tn $taskName | Out-Null
-    Write-Host "Registered scheduled task '$taskName' (every 5 minutes)."
+    Write-Host "Registered scheduled task '$taskName' (every 5 minutes, hidden)."
     exit 0
 }
 
