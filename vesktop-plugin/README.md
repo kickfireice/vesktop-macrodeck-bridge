@@ -15,7 +15,6 @@ contract is [`PROTOCOL.md`](./PROTOCOL.md) — the single source of truth
 vesktop-plugin/
   PROTOCOL.md            # shared contract (DO NOT fork)
   README.md              # this file (setup + designs)
-  TESTPLAN.md            # build verification + mock-bridge test plan
   package.json           # scripts: typecheck / build / mock-bridge / mock-bridge:test
   tsconfig.json
   src/
@@ -114,7 +113,7 @@ access is `try/catch` with null-fallback; repeated scans cached.
 
 | Adapter | Covers | Key probes |
 |---|---|---|
-| voice | mute/deafen/join/leave/move | MediaEngine (`toggleSelfMute`), VoiceActions (`selectVoiceChannel`) |
+| voice | mute/deafen/join/leave/move | MediaEngineStore via `findStore` (read: `isSelfMute`/`isSelfDeaf`; write: Flux actions `AUDIO_TOGGLE_SELF_MUTE`/`AUDIO_TOGGLE_SELF_DEAF`), VoiceActions (`selectVoiceChannel`) |
 | channel | lists, resolve id/name/path, text select, ack-read | ChannelStore, GuildStore, ChannelSelectActions |
 | status | presence, custom status | PresenceActions, PresenceStore, CustomStatus |
 | volume | in/out 0–100, per-user 0–200, local mute | MediaEngine volumes, UserVolumeStore |
@@ -124,8 +123,10 @@ access is `try/catch` with null-fallback; repeated scans cached.
 
 ## 8. State subscription design — `src/state.ts`
 
-`subscribeAll()` hooks `FluxDispatcher` events (`SELF_MUTE_UPDATE`,
-`VOICE_STATE_UPDATES`, `CHANNEL_SELECT`, `PRESENCE_UPDATES`, …) with per-build
+`subscribeAll()` hooks `FluxDispatcher` events (`AUDIO_TOGGLE_SELF_MUTE`,
+`AUDIO_SET_SELF_MUTE`, `AUDIO_TOGGLE_SELF_DEAF`, `VOICE_STATE_UPDATES`,
+`CHANNEL_SELECT`, `PRESENCE_UPDATES`, …; the older `SELF_MUTE_UPDATE`/
+`SELF_DEAF_UPDATE` names stay subscribed for older builds) with per-build
 name tolerance — missing events skipped silently. **No polling.** Debounce
 150 ms (within the 100–250 ms window) for coalescable changes (volumes);
 **immediate** for mute/deafen/join/leave/select/auth. `seq` starts at 1 per
@@ -180,20 +181,48 @@ npm run build       # tsc → dist/
 Copy `src/` (or `dist/`) into your Vesktop/Vencord plugin folder as plugin
 `macro-deck-bridge`, reload Vesktop (`Ctrl+R`), set host/port/token, enable.
 
-## 14. Test plan — see [`TESTPLAN.md`](./TESTPLAN.md)
-
-Unit (protocol/validation/caps/commands) + integration (mock bridge handshake,
-snapshot, commands incl. error codes, reconnect/resync, heartbeat timeout).
-
-## 15. Mock bridge test plan — see [`TESTPLAN.md`](./TESTPLAN.md) + `mock-bridge/`
+## 14. Verifying without Discord (mock bridge)
 
 ```sh
 npm run mock-bridge            # interactive CLI (send commands to the plugin)
 npm run mock-bridge:test       # automated: handshake→snapshot→caps→sample commands
 ```
 
+Unit checks (protocol envelope round-trips, 64 KB limit, bad version/type,
+volume clamps, backoff ladder, host/port sanitize, capability/command/logger
+behaviour) run via `npm test`. Integration checks (handshake, snapshot shape,
+commands incl. error codes, reconnect/resync, heartbeat timeout, readOnly,
+channel/device lists) run against the mock bridge above.
+
 ## Appendix — Vencord/Vesktop API limitations & unknowns
 
-See [`TESTPLAN.md` §API unknowns](./TESTPLAN.md#api-unknowns). Every unknown
-has a safe stub marking the feature `unsupported` until confirmed in a real
-Discord build — capability flags stay `false`, commands answer `UNSUPPORTED`.
+Vencord/Vesktop internals are version-dependent and undocumented for this use.
+The plugin was built against these **assumptions**, each guarded: if the probe
+fails, the feature reports `unsupported` (`false` flag + `UNSUPPORTED`) instead
+of crashing.
+
+| # | Unknown | Assumption (candidate probes) | Stub behaviour until confirmed |
+|---|---|---|---|
+| A1 | plugin API version | `definePlugin({name, start, stop})` + numeric `SettingType` | index.ts uses plain def + numeric setting kinds; works even if helper renamed |
+| A2 | WS client allowed? | renderer has global `WebSocket` (Chromium/Electron) | `socket.ts` factory throws `INTERNAL_ERROR` (no crash) if missing |
+| A3 | settings storage | host settings store, token field `isPassword` | in-memory mirror (`memSettings`) so logic/tests run standalone |
+| A4 | store: mute/deafen | **confirmed on Vesktop 1.6.6 / Vencord b52ed36 (2026-10):** store found via `findStore("MediaEngineStore")`; state read with `isSelfMute()`/`isSelfDeaf()`; toggled with Flux actions `AUDIO_TOGGLE_SELF_MUTE`/`AUDIO_TOGGLE_SELF_DEAF` (`context:"default"`, `syncRemote:true`); `set_*` uses a store setter when present, else read→toggle (no set action exists) | `voiceAvailability.mute/deafen=false`, cmds → `UNSUPPORTED` until the store resolves |
+| A5 | store: voice join/leave | `VoiceActions.selectVoiceChannel` | `voiceJoin/Leave/Move=false`, join cmds → `UNSUPPORTED` |
+| A6 | store: channels/guilds | `ChannelStore.getChannel/getAllChannels`, `GuildStore.getGuilds` | `channelList=false`, lists `[]`, resolve → `NOT_FOUND` |
+| A7 | store: text select/ack | `ChannelSelectActions.selectChannel`, `ChannelAck.ackChannel` | `textChannelSelect/markChannelRead=false` |
+| A8 | store: presence | `PresenceActions.updateStatus`, `PresenceStore.getStatus` | `status=false`, status cmds → `UNSUPPORTED`, snapshot `userStatus:"unknown"` |
+| A9 | store: custom status | `CustomStatusActions.updateCustomStatus` | `customStatus=false` |
+| A10 | store: volumes | `MediaEngine.get/setInputVolume`, `UserVolumeStore.setUserVolume` | volume flags `false`, snapshot `null` |
+| A11 | store: devices | `MediaDeviceStore.getInputDevices/setInputDevice` | device flags `false`, lists empty |
+| A12 | store: audio-proc | `VoiceSettings.setNoiseSuppression…` | NS/EC/AGC/QoS/LL/attenuation `false`/`null` |
+| A13 | store: speaker mute | no known action | **always `false`** + `set_speaker_mute` → `UNSUPPORTED` by design |
+| A14 | store: stage | `StageActions.raiseHand/requestToSpeak` | stage flags `false`, cmds → `UNSUPPORTED` |
+| A15 | events | `FluxDispatcher` + `AUDIO_TOGGLE_SELF_MUTE`/`AUDIO_SET_SELF_MUTE`/`AUDIO_TOGGLE_SELF_DEAF`/`VOICE_STATE_UPDATES`/`CHANNEL_SELECT`/… (older `SELF_MUTE_UPDATE`/`SELF_DEAF_UPDATE` kept for older builds) | `subscribeAll` warns once, degrades to snapshot-on-demand |
+| A16 | ready signal | `UserStore.getCurrentUser()` non-null ⇒ ready | else `discordReady:false`, mutating cmds → `DISCORD_NOT_READY` |
+| A17 | Vesktop extras | unknown (same as Vencord for v1) | no Vesktop-only API used; parity assumed |
+| A18 | advanced: per-user vol read-back, local-mute toggle, last-text memory | no reliable getter | toggle variants → `UNSUPPORTED` with `use set_*` hint; `select_last_text_channel` best-effort |
+
+Confirm each A-item in a real Vesktop build (DevTools →
+`Vencord.Webpack.findByProps(...)`) and tighten the candidate prop-sets;
+capability flags will flip to `true` automatically once the store resolves —
+no protocol change needed.

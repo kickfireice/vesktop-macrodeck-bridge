@@ -31,7 +31,7 @@ macrodeck-plugin run --project src/VesktopBridge.Plugin/VesktopBridge.Plugin.csp
 
 ```powershell
 macrodeck-plugin build --output ../artifacts
-macrodeck-plugin validate --artifact ../artifacts/com.example.vesktop-bridge-1.0.0.macroDeckPlugin
+macrodeck-plugin validate --artifact ../artifacts/com.kickfireice.vesktop-bridge-1.0.0.macroDeckPlugin
 ```
 
 (Uses `src/VesktopBridge.Plugin/macrodeck-build.json`: framework-dependent

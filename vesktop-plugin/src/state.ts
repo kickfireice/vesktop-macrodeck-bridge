@@ -189,8 +189,13 @@ export function subscribeAll(onPatch: (patch: Partial<State>, seq: number) => vo
     log.warn("state", "FluxDispatcher unavailable; live updates degraded until Discord internals resolve");
     return;
   }
-  // Candidate event names across Discord builds. Missing ones are skipped silently.
+  // Candidate event names across Discord builds (current builds use the AUDIO_*
+  // actions; the SELF_*_UPDATE names are kept for older builds). Missing ones are skipped silently.
   const handlers: [string, () => Partial<State>][] = [
+    ["AUDIO_TOGGLE_SELF_MUTE", () => ({ selfMuted: VoiceAdapter.isSelfMuted() })],
+    ["AUDIO_SET_SELF_MUTE", () => ({ selfMuted: VoiceAdapter.isSelfMuted() })],
+    ["AUDIO_SET_TEMPORARY_SELF_MUTE", () => ({ selfMuted: VoiceAdapter.isSelfMuted() })],
+    ["AUDIO_TOGGLE_SELF_DEAF", () => ({ selfDeafened: VoiceAdapter.isSelfDeafened() })],
     ["SELF_MUTE_UPDATE", () => ({ selfMuted: VoiceAdapter.isSelfMuted() })],
     ["SELF_DEAF_UPDATE", () => ({ selfDeafened: VoiceAdapter.isSelfDeafened() })],
     ["VOICE_STATE_UPDATES", () => {

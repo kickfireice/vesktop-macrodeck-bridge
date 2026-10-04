@@ -83,7 +83,9 @@ let started = false;
 
 function wsUrl(): string {
   const s = getSettings();
-  return `ws://${s.host}:${s.port}`;
+  // MUST include /ws/ — the server's HttpListener prefix is http://127.0.0.1:{port}/ws/
+  // (bare ws://host:port/ gets a 404 from http.sys and the socket never opens).
+  return `ws://${s.host}:${s.port}/ws/`;
 }
 
 function sendSnapshotWithReply(replyTo?: string) {

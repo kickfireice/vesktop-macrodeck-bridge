@@ -27,7 +27,7 @@ macrodeck-plugin/
       StateCache.cs
       BridgeLog.cs
     VesktopBridge.Plugin/         Macro Deck 3 SDK adapters (real, compiles)
-      manifest.json                 id com.example.vesktop-bridge, v1.0.0
+      manifest.json                 id com.kickfireice.vesktop-bridge, v1.0.0
       macrodeck-build.json
       Program.cs                  hosting bootstrap
       BridgeService.cs            lifecycle + settings + token mgmt
@@ -77,4 +77,4 @@ dotnet run --project tests/BridgeInterop/BridgeInterop.csproj
 Details: `docs/WS_SERVER_DESIGN.md`, `docs/AUTH_DESIGN.md`,
 `docs/STATE_CACHE_DESIGN.md`, `docs/CHANNEL_DEVICE_CACHE.md`,
 `docs/ERROR_HANDLING.md`, `docs/LOGGING.md`, `docs/ACTIONS_FEEDBACK_SETTINGS.md`,
-`docs/SDK_ASSUMPTIONS.md`, `docs/TEST_PLAN.md`, `docs/MOCK_CLIENT_TEST_PLAN.md`.
+`docs/SDK_ASSUMPTIONS.md`.

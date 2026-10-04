@@ -33,11 +33,45 @@ plugin is the **client**. Nothing leaves your machine.
 - **Honest capability reporting**: if your Vesktop/Discord build cannot do something,
   the button reports *unavailable* instead of silently doing nothing.
 
-## Install
+## Setup (read this first)
+
+You need **both halves** on the **same PC** (everything is localhost-only).
+The fastest path is the setup script (Windows PowerShell):
+
+```powershell
+# from the repository root:
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+What it does: checks prerequisites (Git, Node, pnpm, .NET 10 SDK),
+builds the Macro Deck plugin, clones Vencord at the matching rev (if needed),
+copies in the `MacroDeckBridge` userplugin, builds it, deploys it to Vesktop,
+points Vesktop at the build, and restarts Vesktop. Re-run
+`.\setup.ps1 -CheckOnly` any time to verify the install without changing anything.
+
+Prefer manual steps? They are below. Either way, finish with **pairing**
+(step 3) — without it, buttons report `NOT_CONNECTED`.
+
+### Prerequisites
+
+| Tool | Needed for | Check |
+|---|---|---|
+| Git | cloning Vencord | `git --version` |
+| Node.js ≥ 22 | protocol tests | `node --version` |
+| pnpm | building Vencord | `pnpm --version` (`corepack enable` then `corepack prepare pnpm --activate` if missing) |
+| .NET 10 SDK | building the Macro Deck plugin | `dotnet --version` → `10.x` |
+| Vesktop (desktop) | the client half | installed and logged into Discord |
+| Macro Deck 3 | the server half | installed |
 
 ### 1. Macro Deck plugin (server)
 
-1. Install from the Macro Deck Store, **or** build it yourself (see below).
+1. Install from the Macro Deck Store, **or** build it yourself:
+
+   ```powershell
+   cd macrodeck-plugin
+   dotnet build VesktopBridge.slnx
+   ```
+
 2. Open its settings and **Copy** the generated token. The plugin listens on
    `127.0.0.1` and shows the port it actually bound (`8323` by default; it steps up if
    that port is unavailable).
@@ -46,21 +80,46 @@ plugin is the **client**. Nothing leaves your machine.
 ### 2. Vesktop client plugin (client)
 
 Vencord plugins are compiled into Vencord at build time, so this half is built rather
-than installed:
+than installed. **The Vencord rev must match the one Vesktop ships**
+(Vesktop 1.6.6 = `b52ed36`). A mismatched build is silently replaced by the stock
+release on every Vesktop launch, and the plugin vanishes from the list.
 
 ```bash
-git clone https://github.com/Vendicated/Vencord
+git clone https://github.com/Vendicated/Vencord Vencord
 cd Vencord
-git checkout v1.15.9                 # must match the Vencord version Vesktop ships
-cp -r /path/to/repo/vesktop-plugin/userplugins/MacroDeckBridge src/userplugins/
+git checkout b52ed36                # match Vesktop's shipped rev — if in doubt, check the header of %APPDATA%\Vesktop\vencord\vencordDesktopRenderer.js after a clean launch
+cp -r ../vesktop-plugin/userplugins/MacroDeckBridge src/userplugins/
 pnpm install
 pnpm build --standalone
 ```
 
 Then point Vesktop at that build: **Vesktop Settings -> Developer Options -> Vencord
-Location** (this sets `vencordDir` in Vesktop's `state.json`). Restart Vesktop, enable
-`MacroDeckBridge` in Vencord's plugin list, and paste the token from step 1 into the
-plugin's settings.
+Location** (this sets `vencordDir` in Vesktop's `state.json` — `setup.ps1` does this
+for you). Restart Vesktop and enable `MacroDeckBridge` in the plugin list.
+
+> Never use Vesktop's **Force Update Vencord** (or `vesktop --repair`) with a custom
+> build — it re-downloads stock Vencord over your directory by design. After any
+> Vesktop update, re-run `.\setup.ps1` to rebuild against the new rev.
+
+### 3. Pair the two halves (required)
+
+1. Macro Deck plugin settings → **Copy** the token (and note the port).
+2. Vesktop → Vencord plugin settings → `MacroDeckBridge` → paste the **same**
+   token, set the **same** port (`8323` unless Macro Deck shows a fallback).
+3. In Macro Deck, run **Check Vesktop Connection**: success means the handshake
+   (`hello` → `welcome` → snapshot → heartbeat) completed. `AUTH_FAILED` = wrong
+   token; `ALREADY_CONNECTED` = another client holds the single session;
+   `NOT_CONNECTED` = Vesktop side not reaching Macro Deck (check host/port and
+   that the Vesktop plugin is enabled).
+
+### 4. Verify it works
+
+1. Join a voice channel in Discord.
+2. Press a **Toggle Mute** button. Discord should mute/unmute.
+3. Run **Show Bridge Status**: it shows port, connected client, and Discord readiness.
+4. If a button reports `UNSUPPORTED`, your Vesktop/Discord build lacks that Discord
+   internal — the capability list in the plugin's settings page shows what is
+   available. `DISCORD_NOT_READY` means Discord is still booting — wait for login.
 
 ## Configuration
 
@@ -93,7 +152,9 @@ plugin's settings.
   talk to, and buttons will report offline / `NOT_FOUND`.
 - Because the client half is a Vencord plugin, it must be **rebuilt whenever Vesktop
   ships a new Vencord version**. This is a limitation of Vencord's plugin model, not of
-  this project.
+  this project. If the revs mismatch, Vesktop's startup updater silently replaces
+  the custom build with the stock release on every launch (plugin vanishes from
+  the list) — rebuild against the rev Vesktop ships (see install step 2).
 - Some capabilities depend on Discord internals that change between builds. Where a
   feature cannot be reached it is reported as **unavailable** rather than faked.
 - Commands that target a channel accept an id, a name, or a `Guild / Category / Channel`

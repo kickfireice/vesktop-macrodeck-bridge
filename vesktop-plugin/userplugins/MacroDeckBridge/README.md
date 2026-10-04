@@ -18,6 +18,18 @@ inside Vencord. One file genuinely differs and it is marked in-source:
 |---|---|
 | `bridge/adapters/discovery.ts` | The standalone scaffold probed a `window.Vencord` global, which does not exist in Vencord. This copy imports the real `@webpack` API instead. |
 
+Two implementation notes carried by the adapters:
+
+- Stores are resolved through Vencord's `findStore` (by display name), not prop
+  scans, because current Discord builds keep store methods on the class
+  prototype. Failed lookups are **not** cached — they are retried — so features
+  are not pinned to `UNSUPPORTED` when the plugin starts before Discord has
+  finished booting.
+- Mute/deafen toggling uses Discord's own Flux actions
+  (`AUDIO_TOGGLE_SELF_MUTE` / `AUDIO_TOGGLE_SELF_DEAF`, `context: "default"`,
+  `syncRemote: true`) — the exact path the Discord UI itself uses — with the
+  legacy store methods kept as the first choice for older builds.
+
 `authorIcon.png` (256×256) is inlined into the bundle at build time via Vencord's
 `file://` import and shown on the plugin's settings page.
 

@@ -1,12 +1,13 @@
 /**
  * adapters/discovery.ts — Safe webpack-module discovery.
  *
- * RULES: cache every find; warn once per missing module; never throw; never
- * tight-loop a scan. All adapters use `tryFind()` / `cached()` helpers here.
+ * RULES: cache positive finds only (misses are retried, since modules can
+ * register after plugin start); warn once per missing module; never throw;
+ * never tight-loop a scan. All adapters use `tryFind()` / `cached()` helpers here.
  *
  * NOTE: the standalone `vesktop-plugin` scaffold probed a `window.Vencord`
  * global because it could not import Vencord modules. Inside a real
- * Vencord/Vesktop build there is no such global — Vencord v1.15.9 exposes its
+ * Vencord/Vesktop build there is no such global — Vencord exposes its
  * webpack API only as ES modules. This adapted copy therefore binds directly to
  * `@webpack`; every other behaviour (caching, warn-once, never-throw) is
  * unchanged.
@@ -45,15 +46,16 @@ export function tryFind(debugName: string, ...propSets: string[][]): any | null 
   const key = `props:${debugName}`;
   if (cache.has(key)) return cache.get(key) ?? null;
   const wp = getWebpack();
-  if (!wp?.findByProps) { markMissing(debugName); cache.set(key, null); return null; }
+  if (!wp?.findByProps) { markMissing(debugName); return null; }
   for (const props of propSets) {
     try {
       const mod = wp.findByProps(...props);
       if (mod) { cache.set(key, mod); return mod; }
     } catch { /* try next candidate set */ }
   }
+  // Deliberately NOT cached: modules can register after plugin start (Discord
+  // boots async); a cached miss would pin this feature to UNSUPPORTED forever.
   markMissing(debugName);
-  cache.set(key, null);
   return null;
 }
 
@@ -62,15 +64,15 @@ export function tryFindStore(debugName: string, ...names: string[]): any | null 
   const key = `store:${debugName}`;
   if (cache.has(key)) return cache.get(key) ?? null;
   const wp = getWebpack();
-  if (!wp?.findStore) { markMissing(debugName); cache.set(key, null); return null; }
+  if (!wp?.findStore) { markMissing(debugName); return null; }
   for (const n of names) {
     try {
       const mod = wp.findStore(n);
       if (mod) { cache.set(key, mod); return mod; }
     } catch { /* next */ }
   }
+  // Misses are not cached — the store may only register once Discord is ready.
   markMissing(debugName);
-  cache.set(key, null);
   return null;
 }
 
@@ -93,7 +95,6 @@ export function getDispatcher(): any | null {
   // Heuristic: a dispatcher has .subscribe + .dispatch functions.
   if (!d || typeof d.subscribe !== "function" || typeof d.dispatch !== "function") {
     markMissing("FluxDispatcher");
-    cache.set(key, null);
     return null;
   }
   cache.set(key, d);

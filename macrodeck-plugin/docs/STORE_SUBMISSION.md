@@ -1,8 +1,11 @@
 # Store submission checklist (Macro Deck Store guidelines)
 
 Status: repository is public, package identity is developer-scoped, manifest
-validates. Remaining publisher steps before submitting: screenshots and one
-end-to-end button test on a healthy install.
+validates at Publication level with 0 errors, artifact
+`com.kickfireice.vesktop-bridge-1.0.0.macroDeckPlugin` packed from this source.
+Remaining publisher steps before submitting: install the packed artifact over
+the old copy, take screenshots, and submit via the Creator Portal
+(AI assistance declared in the portal form).
 
 Repository: https://github.com/kickfireice/vesktop-macrodeck-bridge (public, MIT).
 
@@ -29,20 +32,24 @@ Repository: https://github.com/kickfireice/vesktop-macrodeck-bridge (public, MIT
       precompiled third-party DLLs bundled. Core has zero external deps.
 - [x] Privacy (§8): fully local — binds `127.0.0.1` only, token auth, no cloud,
       no telemetry, no external traffic. State this in the store listing.
-- [x] Conformance suite: `macrodeck-plugin test` → Conformant: yes
-      (31 pass, 0 fail).
+- [x] **Functionality (§6) verified live 2026-10-04:** Toggle Mute / Deafen
+  buttons drive Discord for real (Macro Deck 3 + Vesktop 1.6.6 /
+  Vencord b52ed36). (Conformance `test` run showed passes but was stopped
+  early — its checks toggle live mute/deafen.)
+- [x] Icon rights (§3): publisher confirms `Assets/icon.png` is fine to
+  redistribute.
 
 ## TODO (publisher — before submitting to the store)
 
-1. **Functionality (§6):** verify a healthy install in Macro Deck 3 + one
-   end-to-end button press (e.g. Toggle Mute) before submitting.
-2. **Store listing (§10):** add real screenshots, install/usage steps, and
-   document limitations: requires the companion Vesktop plugin (token pairing),
-   localhost-only, some Discord features report `unsupported` depending on the
-   Vesktop build.
-3. **Icon rights (§3):** confirm you own or may redistribute `Assets/icon.png`.
-   If it is AI-generated, declare it in the Creator Portal (§9). If it is
-   third-party art, replace it with your own first.
+1. **Reinstall (§1 — source must match the distributed plugin):** install
+   `artifacts/com.kickfireice.vesktop-bridge-1.0.0.macroDeckPlugin` in Macro
+   Deck over the old copy (the running install still uses a legacy id).
+   The token in `%AppData%/DeckBridge/settings.json` is id-independent and
+   survives the reinstall — no re-pairing needed. Then restart Macro Deck.
+2. **Store listing (§10):** add real screenshots. Install/usage steps are in
+   the root README (Setup + Verify sections); limitations documented there
+   (companion Vesktop plugin + token pairing required, localhost-only, some
+   Discord features report `unsupported` per Vesktop build).
 
 ## AI declaration (§9)
 
