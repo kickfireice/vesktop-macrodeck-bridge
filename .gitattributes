@@ -8,6 +8,9 @@
 
 # Shell scripts must keep LF everywhere - CRLF breaks the #! line on Linux.
 *.sh    text eol=lf
+# CI workflows must keep LF - CRLF breaks shell steps on Linux runners.
+*.yml   text eol=lf
+*.yaml  text eol=lf
 
 # Binary assets - never touch these.
 *.png   binary
