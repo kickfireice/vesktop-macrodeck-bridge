@@ -14,3 +14,5 @@ jobs:
       version: ${{ github.event.release.tag_name }}
       source: macrodeck-plugin/src/VesktopBridge.Plugin
       changelog: ${{ github.event.release.body }}
+      # Platform minimum is 3.0.0-beta.15; the setup action's default is older.
+      cli-version: 3.0.0-beta.15
