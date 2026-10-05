@@ -57,11 +57,9 @@ Repository: https://github.com/kickfireice/vesktop-macrodeck-bridge (public, MIT
 
 This project was developed with AI assistance (code written with AI agents;
 see git history), and the plugin icon (`Assets/icon.png`) is AI-generated.
-There is currently no `ai` field in the manifest
-schema/template — declare both in the Creator Portal submission form
-("made with AI" + "ships with AI-created assets"; NOT runtime-AI use),
-and keep this file as the in-repo record. The plugin itself uses no AI at
-runtime and sends no data anywhere.
+Declared in `manifest.json` (`ai: interaction false, generatedContent false,
+generatedAssets true`, no services — the plugin uses no AI at runtime and
+sends no data anywhere) and in the Creator Portal submission form.
 
 ## Notes for review
 

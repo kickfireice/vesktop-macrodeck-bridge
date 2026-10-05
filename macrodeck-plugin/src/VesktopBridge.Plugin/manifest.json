@@ -24,6 +24,11 @@
     "name": "Kick Fire"
   },
   "license": "MIT",
+  "ai": {
+    "interaction": false,
+    "generatedContent": false,
+    "generatedAssets": true
+  },
   "repository": "https://github.com/kickfireice/vesktop-macrodeck-bridge",
   "compatibility": {
     "macroDeck": ">=3.0.0-0"
