@@ -110,6 +110,9 @@ internal class BridgeCommandAction : IActionDefinition, IStateProviderActionDefi
 
     public IActionExecutor CreateExecutor() => new Exec(this);
 
+    /// Poll fast: buttons must reflect Discord within ~a second, not the host default.
+    public TimeSpan StatePollInterval => TimeSpan.FromSeconds(1);
+
     protected BridgeService BridgeSvc => _bridge;
 
     private sealed class Exec(BridgeCommandAction a) : IActionExecutor

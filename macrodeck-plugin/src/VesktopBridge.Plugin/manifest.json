@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "com.kickfireice.vesktop-bridge",
   "name": "Vesktop Bridge",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Unofficial community plugin. Localhost-only bridge: drive Discord (via Vesktop) from Macro Deck buttons. Server on 127.0.0.1, token auth, live button states. Not affiliated with or endorsed by Vesktop, Vencord, Discord, or Macro Deck.",
   "icon": "Assets/icon.png",
   "entrypoints": {

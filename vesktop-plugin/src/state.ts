@@ -20,7 +20,7 @@ import { StageAdapter } from "./adapters/stage";
 import { getDispatcher, tryFind } from "./adapters/discovery";
 import { log } from "./logger";
 
-export const PLUGIN_VERSION = "1.0.0";
+export const PLUGIN_VERSION = "1.0.5";
 const DEBOUNCE_MS = 150;
 const IMMEDIATE_KEYS = new Set([
   "selfMuted", "selfDeafened", "voiceChannelId", "voiceConnected",

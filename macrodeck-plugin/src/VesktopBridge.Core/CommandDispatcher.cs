@@ -38,6 +38,7 @@ public sealed class CommandDispatcher
     }
 
     public bool IsConnected => _state.IsLive && _server.ActiveClient is not null;
+    public int PendingCount => _pending.Count;
 
     /// Local pre-checks only (never fail silently — every path returns a
     /// CommandOutcome with a normative error code). Returns null if the

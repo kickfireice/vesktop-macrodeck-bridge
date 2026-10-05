@@ -20,7 +20,7 @@ import { handleCommand } from "./commands";
 import { clearDiscoveryCache } from "./adapters/discovery";
 
 const PLUGIN_NAME = "MacroDeckBridge";
-const PLUGIN_VERSION = "1.0.0";
+const PLUGIN_VERSION = "1.0.5";
 
 // Settings backing: Vencord store when available, else in-memory defaults.
 type S = typeof DEFAULT_SETTINGS;

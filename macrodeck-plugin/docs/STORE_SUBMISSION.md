@@ -49,7 +49,8 @@ Repository: https://github.com/kickfireice/vesktop-macrodeck-bridge (public, MIT
 2. **Store listing (§10):** add real screenshots. Install/usage steps are in
    the root README (Setup + Verify sections); limitations documented there
    (companion Vesktop plugin + token pairing required, localhost-only, some
-   Discord features report `unsupported` per Vesktop build).
+   Discord features report `unsupported` per Vesktop build, button/label
+   visuals can lag a few seconds on the host's widget refresh cadence).
 
 ## AI declaration (§9)
 

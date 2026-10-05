@@ -215,9 +215,11 @@ export const COMMANDS = [
   "set_user_volume", "increase_user_volume", "decrease_user_volume", "reset_user_volume",
   "toggle_user_local_mute", "set_user_local_mute",
   "set_attenuation_volume", "toggle_attenuation_while_speaking", "set_attenuation_while_speaking",
+  "debug_mute_probe", // TEMP-DIAG: removed before release
 ] as const;
 
 // Commands that are pure getters (allowed in readOnly mode).
 export const READONLY_SAFE_COMMANDS = new Set<string>([
   "refresh_state", "get_capabilities", "get_channel_list", "get_device_list",
+  "debug_mute_probe", // TEMP-DIAG
 ]);

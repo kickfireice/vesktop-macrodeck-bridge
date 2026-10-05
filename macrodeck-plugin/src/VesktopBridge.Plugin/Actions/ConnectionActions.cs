@@ -82,9 +82,11 @@ internal static class ConnectionActions
         public LocalizedText Name => L.T("Request Full Resync");
         public LocalizedText Description => L.T("Full resync: refresh state, request snapshot, capabilities, channel and device lists.");
         public IReadOnlyList<ActionParameter> Parameters => [];
-        public IActionExecutor CreateExecutor() => new Exec(bridge);
+    public IActionExecutor CreateExecutor() => new Exec(bridge);
 
-        private sealed class Exec(BridgeService b) : IActionExecutor
+    public TimeSpan StatePollInterval => TimeSpan.FromSeconds(1);
+
+    private sealed class Exec(BridgeService b) : IActionExecutor
         {
             public async Task<ActionResult> ExecuteAsync(ActionExecutionContext context)
             {

@@ -124,13 +124,14 @@ public sealed class BridgeService : IDisposable
         var c = s.ActiveClient;
         var capsOff = string.Join(",", s.Capabilities.Available
             .Where(kv => !kv.Value).Select(kv => kv.Key).OrderBy(k => k));
+        var queue = _dispatcher?.PendingCount ?? -1;
         return $"Bridge running on 127.0.0.1:{s.ActualPort} | " +
                $"client={(c is null ? "none" : c.ClientName + " " + c.ClientVersion)} | " +
                $"discordReady={st.GetValue("discordReady", false)} | " +
                $"readOnly={st.GetValue("readOnly", false)} | " +
                $"proto={BridgeProtocol.Version} | " +
                $"capsOff=[{capsOff}] | " +
-               $"diag=[{BridgeDiagnostics.Summary()}]";
+               $"diag=[{BridgeDiagnostics.Summary()} queue={queue}]";
     }
 
     public void Dispose()

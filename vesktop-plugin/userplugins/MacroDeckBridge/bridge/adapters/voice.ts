@@ -79,6 +79,39 @@ function callSafe(fn: (() => unknown) | undefined, label: string): OpResult {
   }
 }
 
+function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+/**
+ * Act, then confirm the state actually flipped (re-read). Tries each Discord
+ * path in turn (store method, then Flux action): a path that silently no-ops
+ * must NOT report success. Reports VOICE_ERROR honestly when nothing flips.
+ * Unreadable state falls back to trusting the act (old behavior).
+ */
+async function toggleWithFallback(
+  read: () => boolean | null,
+  attempts: (() => OpResult)[],
+  label: string,
+): Promise<OpResult> {
+  const readSafe = (): boolean | null => { try { return read(); } catch { return null; } };
+  let before = readSafe();
+  let lastErr: OpResult = { ok: false, code: "VOICE_ERROR", message: `${label} unavailable` };
+  // Short first window (warm engine flips in ms), longer second (cold priming).
+  const windows = [250, 500];
+  for (const act of attempts) {
+    const r = act();
+    if (!r.ok) { lastErr = r; continue; }
+    for (const w of windows) {
+      try { await sleep(w); } catch { /* ignore */ }
+      const after = readSafe();
+      if (before === null || after === null) return { ok: true };
+      if (after !== before) return { ok: true };
+    }
+    lastErr = { ok: false, code: "VOICE_ERROR", message: `${label} did not change state` };
+    before = readSafe();
+  }
+  return lastErr;
+}
+
 export const VoiceAdapter = {
   isSelfMuted(): boolean | null {
     try {
@@ -96,20 +129,28 @@ export const VoiceAdapter = {
       return typeof me.selfDeaf === "boolean" ? me.selfDeaf : null;
     } catch { return null; }
   },
-  toggleMute(): OpResult {
+  async toggleMute(): Promise<OpResult> {
     const me = mediaEngine(); if (!me) return { ok: false, code: "UNSUPPORTED", message: "mute unavailable" };
     // Older builds expose a store toggle; current builds only react to the action.
+    // A cold audio engine can swallow the first dispatch out of a call, so the
+    // Flux path is attempted twice (second attempt lands once primed).
     const fn = pickFn(me, ["toggleSelfMute", "toggleMute"]);
-    if (fn) return callSafe(fn, "toggleMute");
-    return dispatchSafe({ type: "AUDIO_TOGGLE_SELF_MUTE", context: "default", syncRemote: true, playSoundEffect: true }, "toggleMute");
+    const flux = () => dispatchSafe({ type: "AUDIO_TOGGLE_SELF_MUTE", context: "default", syncRemote: true, playSoundEffect: true }, "toggleMute");
+    const attempts = fn ? [() => callSafe(fn, "toggleMute"), flux, flux] : [flux, flux];
+    return toggleWithFallback(() => VoiceAdapter.isSelfMuted(), attempts, "toggleMute");
   },
-  setMute(muted: boolean): OpResult {
+  async setMute(muted: boolean): Promise<OpResult> {
     const me = mediaEngine(); if (!me) return { ok: false, code: "UNSUPPORTED", message: "mute unavailable" };
     // Older builds expose a direct setter.
     const set = pickFn(me, ["setSelfMute", "setMute"]);
     if (set) {
-      try { set(muted); return { ok: true }; }
-      catch (e: any) { return { ok: false, code: "VOICE_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
+      try {
+        set(muted);
+        await sleep(250)
+        const after = VoiceAdapter.isSelfMuted();
+        if (after === null || after === muted) return { ok: true };
+        // Setter lied: fall through to the toggle path below.
+      } catch (e: any) { return { ok: false, code: "VOICE_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
     }
     // Current builds: read first, then toggle only when the state differs
     // (the same route the Discord UI's mute button takes).
@@ -118,18 +159,23 @@ export const VoiceAdapter = {
     if (cur !== muted) return VoiceAdapter.toggleMute();
     return { ok: true };
   },
-  toggleDeafen(): OpResult {
+  async toggleDeafen(): Promise<OpResult> {
     const me = mediaEngine(); if (!me) return { ok: false, code: "UNSUPPORTED", message: "deafen unavailable" };
     const fn = pickFn(me, ["toggleSelfDeafen", "toggleDeafen"]);
-    if (fn) return callSafe(fn, "toggleDeafen");
-    return dispatchSafe({ type: "AUDIO_TOGGLE_SELF_DEAF", context: "default", syncRemote: true }, "toggleDeafen");
+    const flux = () => dispatchSafe({ type: "AUDIO_TOGGLE_SELF_DEAF", context: "default", syncRemote: true }, "toggleDeafen");
+    const attempts = fn ? [() => callSafe(fn, "toggleDeafen"), flux, flux] : [flux, flux];
+    return toggleWithFallback(() => VoiceAdapter.isSelfDeafened(), attempts, "toggleDeafen");
   },
-  setDeafen(deafened: boolean): OpResult {
+  async setDeafen(deafened: boolean): Promise<OpResult> {
     const me = mediaEngine(); if (!me) return { ok: false, code: "UNSUPPORTED", message: "deafen unavailable" };
     const set = pickFn(me, ["setSelfDeafen", "setDeafen"]);
     if (set) {
-      try { set(deafened); return { ok: true }; }
-      catch (e: any) { return { ok: false, code: "VOICE_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
+      try {
+        set(deafened);
+        await sleep(250)
+        const after = VoiceAdapter.isSelfDeafened();
+        if (after === null || after === deafened) return { ok: true };
+      } catch (e: any) { return { ok: false, code: "VOICE_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
     }
     // Current builds expose no set-deafen action — read then toggle if needed.
     const cur = VoiceAdapter.isSelfDeafened();
@@ -167,3 +213,43 @@ export const VoiceAdapter = {
     } catch { return null; }
   },
 };
+
+/** TEMP-DIAG: read-only engine inventory. Removed before release. No side effects. */
+export function debugMuteProbe(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const methodNames = (obj: any): string[] => {
+    const names = new Set<string>();
+    try {
+      let o: any = obj;
+      while (o && o !== Object.prototype) {
+        for (const k of Object.getOwnPropertyNames(o)) {
+          if (k === "constructor") continue;
+          try { if (typeof o[k] === "function") names.add(k); } catch { /* getter threw */ }
+        }
+        o = Object.getPrototypeOf(o);
+      }
+    } catch { /* ignore */ }
+    return [...names].sort();
+  };
+  try {
+    const me: any = mediaEngine();
+    out.engineFound = !!me;
+    const all = methodNames(me).filter((n) => /mute|deaf|volume|mic|audio/i.test(n));
+    out.engineMuteMethods = all.slice(0, 40);
+    out.isSelfMuteType = typeof me?.isSelfMute;
+    out.isSelfMutedValue = (() => { try { return VoiceAdapter.isSelfMuted(); } catch { return "threw"; } })();
+    out.isSelfDeafenedValue = (() => { try { return VoiceAdapter.isSelfDeafened(); } catch { return "threw"; } })();
+    out.inVoice = VoiceAdapter.currentVoiceChannelId();
+    out.localVolumesKeys = (() => { try { return Object.keys(me?.localVolumes ?? {}).slice(0, 10); } catch { return "threw"; } })();
+    out.localMutesKeys = (() => { try { return Object.keys(me?.localMutes ?? {}).slice(0, 10); } catch { return "threw"; } })();
+  } catch (e: any) { out.engineErr = String(e?.message ?? e).slice(0, 100); }
+  try {
+    const d: any = getDispatcher();
+    out.dispatcherFound = !!d;
+    const reg = d?._orderedActionHandlers ?? d?._actionHandlers ?? d?.actionHandlers ?? null;
+    const keys = reg ? Object.keys(reg) : [];
+    out.actionTypes = keys.filter((k: string) => /AUDIO|MUTE|DEAF|VOICE|MEDIA/i.test(k)).slice(0, 40);
+    out.hasToggleMuteAction = keys.includes("AUDIO_TOGGLE_SELF_MUTE");
+  } catch (e: any) { out.dispatchErr = String(e?.message ?? e).slice(0, 100); }
+  return out;
+}

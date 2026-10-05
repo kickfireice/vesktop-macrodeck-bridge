@@ -121,7 +121,7 @@ export class BridgeSocket {
     const env = makeEnvelope("hello", {
       protocolVersion: PROTOCOL_VERSION,
       name: "vesktop-bridge",
-      version: "1.0.0",
+      version: "1.0.5",
       token: this.deps.getToken(), // ONLY place token is ever sent
       capabilities: caps.available,
     }, { id });

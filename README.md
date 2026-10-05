@@ -178,6 +178,12 @@ for you). Restart Vesktop and enable `MacroDeckBridge` in the plugin list.
   path. Ambiguous names return `AMBIGUOUS` together with the candidates.
 - Voice-related buttons require you to already be in (or join) a voice channel, and
   Discord permissions still apply as normal.
+- **Button and label visuals can lag a few seconds.** Multi-state button states
+  and `vesktop-*` variable labels refresh on Macro Deck's own widget cadence
+  (up to ~5 s observed on 3.0.0-beta.15), even though the bridge pushes state in
+  milliseconds and direct reads are instant. Static buttons react instantly.
+  This is host-side refresh behavior, not something the plugin can set —
+  reported upstream.
 
 ## Repository layout
 

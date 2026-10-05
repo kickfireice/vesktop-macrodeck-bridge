@@ -102,6 +102,7 @@ export const COMMAND_FLAG: Record<string, CapabilityFlag | null> = {
   toggle_user_local_mute: "userLocalMute", set_user_local_mute: "userLocalMute",
   set_attenuation_volume: "attenuation", toggle_attenuation_while_speaking: "attenuation",
   set_attenuation_while_speaking: "attenuation",
+  debug_mute_probe: null, // TEMP-DIAG: removed before release
 };
 
 export function isFlagSupported(command: string, available: Record<string, boolean>): boolean {

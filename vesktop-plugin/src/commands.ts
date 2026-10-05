@@ -74,24 +74,24 @@ export async function handleCommand(command: string, args: any, ctx: CmdCtx): Pr
       case "get_device_list": ctx.emitDevices(); return { ok: true };
 
       // ---- mute / deafen ----
-      case "toggle_mute": { const r: any = VoiceAdapter.toggleMute(); return toOutcome(r); }
+      case "toggle_mute": { const r: any = await VoiceAdapter.toggleMute(); return toOutcome(r); }
       case "set_mute": {
         const m = needArgs(a, ["muted"]); if (m) return m;
-        const r: any = VoiceAdapter.setMute(!!a.muted);
+        const r: any = await VoiceAdapter.setMute(!!a.muted);
         return toOutcome(r, { selfMuted: !!a.muted });
       }
-      case "toggle_deafen": { const r: any = VoiceAdapter.toggleDeafen(); return toOutcome(r); }
+      case "toggle_deafen": { const r: any = await VoiceAdapter.toggleDeafen(); return toOutcome(r); }
       case "set_deafen": {
         const m = needArgs(a, ["deafened"]); if (m) return m;
-        const r: any = VoiceAdapter.setDeafen(!!a.deafened);
+        const r: any = await VoiceAdapter.setDeafen(!!a.deafened);
         return toOutcome(r, { selfDeafened: !!a.deafened });
       }
       case "toggle_mute_and_deafen": {
         // Best-effort: toggle mute, then mirror deafen to match (common UX).
-        const m: any = VoiceAdapter.toggleMute();
+        const m: any = await VoiceAdapter.toggleMute();
         if (!m.ok) return toOutcome(m);
         const curM = VoiceAdapter.isSelfMuted();
-        const d: any = VoiceAdapter.setDeafen(!!curM);
+        const d: any = await VoiceAdapter.setDeafen(!!curM);
         if (!d.ok) return toOutcome(m, { selfMuted: curM });
         return { ok: true, statePatch: { selfMuted: curM, selfDeafened: !!curM } };
       }
