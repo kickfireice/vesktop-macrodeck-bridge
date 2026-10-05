@@ -18,10 +18,16 @@ internal sealed class CheckConnectionAction(BridgeService bridge) : IActionDefin
 
     private sealed class Exec(BridgeService b) : IActionExecutor
     {
-        public Task<ActionResult> ExecuteAsync(ActionExecutionContext context) =>
-            Task.FromResult(b.Dispatcher?.IsConnected == true
-                ? ActionResult.Success()
-                : ActionResult.Failed(ActionErrorCodes.NotConnected, L.T("Vesktop not connected")));
+        public async Task<ActionResult> ExecuteAsync(ActionExecutionContext context)
+        {
+            var d = b.Dispatcher;
+            if (d is null)
+                return ActionResult.Failed(ActionErrorCodes.NotConnected, L.T("Bridge not running"));
+            // Same forgiveness as commands: briefly await a reconnecting Vesktop.
+            if (!await d.WaitForConnectionAsync(TimeSpan.FromSeconds(5), context.CancellationToken))
+                return ActionResult.Failed(ActionErrorCodes.NotConnected, L.T("Vesktop not connected"));
+            return ActionResult.Success();
+        }
     }
 
     public Task<ActionStateSnapshot?> GetActionStateAsync(

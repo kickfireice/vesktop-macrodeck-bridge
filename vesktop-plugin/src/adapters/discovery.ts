@@ -87,6 +87,20 @@ export function tryFindStore(debugName: string, ...names: string[]): any | null 
   return null;
 }
 
+/**
+ * Store-first lookup: resolve by Flux display name (the same mechanism
+ * Vencord's own plugins use — `findStore`, as in `@webpack/common`'s
+ * `waitForStore`), then fall back to prop-sniffing. Name misses are never
+ * cached, so features recover once Discord finishes booting.
+ */
+export function tryStore(debugName: string, storeNames: string[], ...propSets: string[][]): any | null {
+  try {
+    const byName = tryFindStore(debugName, ...storeNames);
+    if (byName) return byName;
+  } catch { /* fall through to props */ }
+  return tryFind(debugName, ...propSets);
+}
+
 export function markMissing(name: string) {
   if (warnedMissing.has(name)) return;
   warnedMissing.add(name);

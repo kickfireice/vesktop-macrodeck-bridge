@@ -64,7 +64,7 @@ internal sealed class InputDeviceOptions(BridgeService b, string id, string name
 {
     public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
         DynamicOptionsContext context, CancellationToken cancellationToken) =>
-        Task.FromResult(DeviceOptions.Input(BridgeSvc));
+        Task.FromResult(DeviceOptions.Input(BridgeSvc, context));
 }
 
 internal sealed class OutputDeviceOptions(BridgeService b, string id, string name, string command,
@@ -75,21 +75,28 @@ internal sealed class OutputDeviceOptions(BridgeService b, string id, string nam
 {
     public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
         DynamicOptionsContext context, CancellationToken cancellationToken) =>
-        Task.FromResult(DeviceOptions.Output(BridgeSvc));
+        Task.FromResult(DeviceOptions.Output(BridgeSvc, context));
 }
 
 internal static class DeviceOptions
 {
-    public static DynamicOptionsResult Input(BridgeService b) => For(b, "input", "input-devices");
-    public static DynamicOptionsResult Output(BridgeService b) => For(b, "output", "output-devices");
+    public static DynamicOptionsResult Input(BridgeService b, DynamicOptionsContext ctx) => For(b, "input", ctx);
+    public static DynamicOptionsResult Output(BridgeService b, DynamicOptionsContext ctx) => For(b, "output", ctx);
 
-    private static DynamicOptionsResult For(BridgeService b, string kind, string _)
+    private static DynamicOptionsResult For(BridgeService b, string kind, DynamicOptionsContext ctx)
     {
-        var list = b.Server?.Lists;
-        if (list is null)
+        BridgeDiagnostics.OptionsRequest(ctx?.ParameterName ?? "-");
+        var server = b.Server;
+        if (server is null)
             return new DynamicOptionsResult
             { Error = L.T("Bridge not running"), Options = [], AllowsCustomValue = true };
-        var devs = kind == "input" ? list.Inputs : list.Outputs;
+        if (server.ActiveClient is null)
+            return new DynamicOptionsResult
+            { Error = L.T("Vesktop not connected - open Vesktop and wait for login"), Options = [], AllowsCustomValue = true };
+        var devs = kind == "input" ? server.Lists.Inputs : server.Lists.Outputs;
+        if (devs.Count == 0)
+            return new DynamicOptionsResult
+            { Error = L.T("No devices received yet - check the Vesktop connection, then reopen this list"), Options = [], AllowsCustomValue = true };
         return new DynamicOptionsResult
         {
             Options = devs.Select(d => new ActionParameterOption
@@ -154,6 +161,58 @@ internal static class DeviceActions
     }
 }
 
+/// User-targeting action with a live "users in your call" dropdown.
+/// Same pattern as VoiceJoinOptions: DynamicChoice without source id, host
+/// routes by parameter name ("userId") to this provider.
+internal sealed class UserSelectOptions(BridgeService b, string id, string name,
+    string description, string command,
+    IReadOnlyList<ActionParameter> parameters,
+    Func<IReadOnlyDictionary<string, object>, System.Text.Json.Nodes.JsonObject?> args)
+    : BridgeCommandAction(b, id, name, description, command, parameters, args),
+    IDynamicOptionsActionDefinition
+{
+    public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
+        DynamicOptionsContext context, CancellationToken cancellationToken)
+        => Task.FromResult(UserOptions.For(BridgeSvc));
+}
+
+internal static class UserOptions
+{
+    public static DynamicOptionsResult For(BridgeService b)
+    {
+        var server = b.Server;
+        if (server is null)
+            return new DynamicOptionsResult
+            { Error = L.T("Bridge not running"), Options = [], AllowsCustomValue = true };
+        if (server.ActiveClient is null)
+            return new DynamicOptionsResult
+            { Error = L.T("Vesktop not connected - open Vesktop and wait for login"), Options = [], AllowsCustomValue = true };
+        var users = new List<(string id, string name)>();
+        try
+        {
+            if (server.State.Snapshot()["voiceUsers"] is System.Text.Json.Nodes.JsonArray arr)
+                foreach (var u in arr.OfType<System.Text.Json.Nodes.JsonObject>())
+                {
+                    var id = u["id"]?.GetValue<string>() ?? "";
+                    var name = u["name"]?.GetValue<string>() ?? "";
+                    if (!string.IsNullOrEmpty(id)) users.Add((id, name));
+                }
+        }
+        catch { /* fall through to empty */ }
+        if (users.Count == 0)
+            return new DynamicOptionsResult
+            { Error = L.T("No users found - join a voice channel first"), Options = [], AllowsCustomValue = true };
+        return new DynamicOptionsResult
+        {
+            Options = users.Select(u => new ActionParameterOption
+                { Value = u.id, Label = L.T(string.IsNullOrEmpty(u.name) ? u.id : u.name) })
+                .Take(50).ToList(),
+            AllowsCustomValue = true,
+            CacheSeconds = 5,
+        };
+    }
+}
+
 internal static class VolumeActions
 {
     public static IEnumerable<IActionDefinition> All(BridgeService b)
@@ -171,30 +230,30 @@ internal static class VolumeActions
             BridgeProtocol.Commands.IncreaseOutputVolume, 5);
         yield return Step(b, "decrease-output-volume", "Decrease Output Volume",
             BridgeProtocol.Commands.DecreaseOutputVolume, 5);
-        // Per-user 0–200 (100 = normal).
-        yield return new BridgeCommandAction(b, "set-user-volume", "Set User Volume",
+        // Per-user 0–200 (100 = normal). User picked from the live call dropdown.
+        yield return new UserSelectOptions(b, "set-user-volume", "Set User Volume",
             "Set a user's local volume (0–200).",
             BridgeProtocol.Commands.SetUserVolume,
-            [P.Text("userId", "User ID", true), P.Slider("volume", "Volume", 0, 200, 100)],
+            [P.User(), P.Slider("volume", "Volume", 0, 200, 100)],
             p => P.Args(("userId", P.V(ReqUser(p))), ("volume", P.V(Clamp(ParamRead.Num(p, "volume", 100), 0, 200)))));
         yield return UserStep(b, "increase-user-volume", "Increase User Volume",
             BridgeProtocol.Commands.IncreaseUserVolume);
         yield return UserStep(b, "decrease-user-volume", "Decrease User Volume",
             BridgeProtocol.Commands.DecreaseUserVolume);
-        yield return new BridgeCommandAction(b, "reset-user-volume", "Reset User Volume",
+        yield return new UserSelectOptions(b, "reset-user-volume", "Reset User Volume",
             "Reset a user's local volume to 100.",
             BridgeProtocol.Commands.ResetUserVolume,
-            [P.Text("userId", "User ID", true)],
+            [P.User()],
             p => P.Args(("userId", P.V(ReqUser(p)))));
-        yield return new BridgeCommandAction(b, "toggle-user-local-mute", "Toggle User Local Mute",
+        yield return new UserSelectOptions(b, "toggle-user-local-mute", "Toggle User Local Mute",
             "Toggle a user's local mute.",
             BridgeProtocol.Commands.ToggleUserLocalMute,
-            [P.Text("userId", "User ID", true)],
+            [P.User()],
             p => P.Args(("userId", P.V(ReqUser(p)))));
-        yield return new BridgeCommandAction(b, "set-user-local-mute", "Set User Local Mute",
+        yield return new UserSelectOptions(b, "set-user-local-mute", "Set User Local Mute",
             "Set a user's local mute explicitly.",
             BridgeProtocol.Commands.SetUserLocalMute,
-            [P.Text("userId", "User ID", true), P.Toggle("muted", "Muted", false)],
+            [P.User(), P.Toggle("muted", "Muted", false)],
             p => P.Args(("userId", P.V(ReqUser(p))), ("muted", P.V(ParamRead.Bool(p, "muted")))));
         // Attenuation 0–100.
         yield return new BridgeCommandAction(b, "set-attenuation-volume", "Set Attenuation Volume",
@@ -232,8 +291,8 @@ internal static class VolumeActions
 
     private static BridgeCommandAction UserStep(BridgeService b, string id, string label, string cmd)
     {
-        return new BridgeCommandAction(b, id, label, $"{label} (default step 10).", cmd,
-            [P.Text("userId", "User ID", true), P.Num("step", "Step", 1, 100, 10)],
+        return new UserSelectOptions(b, id, label, $"{label} (default step 10).", cmd,
+            [P.User(), P.Num("step", "Step", 1, 100, 10)],
             p => P.Args(("userId", P.V(ReqUser(p))), ("step", P.V(ParamRead.Num(p, "step", 10)))));
     }
 

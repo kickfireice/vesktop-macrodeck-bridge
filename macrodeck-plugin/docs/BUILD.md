@@ -5,7 +5,7 @@
 - .NET 10 SDK (`dotnet --version` → 10.x). Core builds offline.
 - Node ≥22 (global `WebSocket` client, no npm deps) for mock/tests.
 - Network once for NuGet restore of the Plugin project
-  (`MacroDeck.* 3.0.0-preview.10`, pinned).
+  (`MacroDeck.* 3.0.0-beta.15`, pinned - must match the Macro Deck host).
 
 ## Build
 

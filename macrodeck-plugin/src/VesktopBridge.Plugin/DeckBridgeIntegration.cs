@@ -62,6 +62,7 @@ public sealed class DeckBridgeIntegration : IPluginIntegration, IVariableProvide
     {
         try
         {
+            BridgeDiagnostics.VariableRead(localId);
             var server = _bridge.Server;
             if (server is null) return ValueTask.FromResult(VariableReading.Unavailable);
             var value = BridgeVariables.Read(server, localId);

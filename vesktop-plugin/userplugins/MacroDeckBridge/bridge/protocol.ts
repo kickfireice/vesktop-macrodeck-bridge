@@ -123,6 +123,7 @@ export interface State {
   selectedTextChannelPath: string | null; selectedGuildId: string | null; selectedGuildName: string | null;
   userStatus: UserStatus;
   customStatusText: string | null; customStatusEmojiName: string | null;
+  voiceUsers: VoiceUser[];
   inputVolume: number | null; outputVolume: number | null;
   inputDeviceId: string | null; inputDeviceName: string | null;
   outputDeviceId: string | null; outputDeviceName: string | null;
@@ -150,6 +151,7 @@ export function emptyState(pluginVersion: string): State {
     selectedTextChannelId: null, selectedTextChannelName: null,
     selectedTextChannelPath: null, selectedGuildId: null, selectedGuildName: null,
     userStatus: "unknown", customStatusText: null, customStatusEmojiName: null,
+    voiceUsers: [],
     inputVolume: null, outputVolume: null,
     inputDeviceId: null, inputDeviceName: null, outputDeviceId: null, outputDeviceName: null,
     noiseSuppressionEnabled: null, echoCancellationEnabled: null,
@@ -162,6 +164,8 @@ export function emptyState(pluginVersion: string): State {
 }
 
 export interface Device { id: string; name: string; kind: "input" | "output"; isDefault: boolean; }
+
+export interface VoiceUser { id: string; name: string; }
 export interface ChannelNode {
   id: string; name: string;
   type: "text" | "voice" | "stage" | "category"; parentId?: string; path: string;

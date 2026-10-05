@@ -2,7 +2,7 @@
  * adapters/stage.ts — StageAdapter: raise/lower hand, request-to-speak.
  * Best-effort; often UNSUPPORTED — reported honestly (§6 stage).
  */
-import { tryFind } from "./discovery";
+import { tryFind, tryStore } from "./discovery";
 import { log } from "../logger";
 
 function stageActions(): any | null {
@@ -12,7 +12,7 @@ function stageActions(): any | null {
     ["inviteToSpeak", "moveToSpeaker"]);
 }
 function stageStore(): any | null {
-  return tryFind("StageStore",
+  return tryStore("StageStore", ["StageStore"],
     ["getStageChannel", "isSpeaker"],
     ["getHandRaised", "getSpeakRequested"]);
 }

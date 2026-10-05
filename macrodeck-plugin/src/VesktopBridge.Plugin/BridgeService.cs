@@ -122,11 +122,15 @@ public sealed class BridgeService : IDisposable
         if (s is null || !s.Running) return "Bridge stopped.";
         var st = s.State;
         var c = s.ActiveClient;
+        var capsOff = string.Join(",", s.Capabilities.Available
+            .Where(kv => !kv.Value).Select(kv => kv.Key).OrderBy(k => k));
         return $"Bridge running on 127.0.0.1:{s.ActualPort} | " +
                $"client={(c is null ? "none" : c.ClientName + " " + c.ClientVersion)} | " +
                $"discordReady={st.GetValue("discordReady", false)} | " +
                $"readOnly={st.GetValue("readOnly", false)} | " +
-               $"proto={BridgeProtocol.Version}";
+               $"proto={BridgeProtocol.Version} | " +
+               $"capsOff=[{capsOff}] | " +
+               $"diag=[{BridgeDiagnostics.Summary()}]";
     }
 
     public void Dispose()

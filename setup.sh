@@ -18,7 +18,7 @@
 # =============================================================================
 set -uo pipefail
 
-VENCORD_REV="b52ed36"
+VENCORD_REV="auto"
 VENCORD_DIR=""
 TARGET=""
 SKIP_MACRODECK=0
@@ -229,6 +229,18 @@ fi
 
 if [ "$SKIP_VESKTOP" -eq 0 ]; then
     say "-- Vesktop client plugin --"
+    # "auto" (default): use whatever rev Vesktop currently ships, read from the
+    # deployed build's header - so a Vesktop update just means re-running setup.
+    if [ "$VENCORD_REV" = "auto" ]; then
+        dep_rev="$(head -n1 "$TARGET/vencordDesktopRenderer.js" 2>/dev/null | grep -o 'Vencord [0-9a-f]\{7,40\}' | awk '{print $2}')"
+        if [ -n "$dep_rev" ]; then
+            VENCORD_REV="$dep_rev"
+            say "Auto-detected Vencord rev $VENCORD_REV from the deployed build."
+        else
+            VENCORD_REV="3374b8a"
+            say "No deployed build found - defaulting to Vencord rev $VENCORD_REV."
+        fi
+    fi
     if [ ! -d "$VENCORD_DIR/.git" ]; then
         say "Cloning Vencord (build dependency, gitignored) ..."
         git clone "$VENCORD_REPO_URL" "$VENCORD_DIR" || { echo "Vencord clone failed." >&2; exit 1; }

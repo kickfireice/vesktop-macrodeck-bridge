@@ -8,7 +8,7 @@
 
     Vesktop's menu item "Force Update Vencord" (and `vesktop --repair`) calls its
     internal downloadVencordFiles(), which OVERWRITES vencordDesktop*.js/css in
-    that directory with the official Vencord release — silently removing custom
+    that directory with the official Vencord release - silently removing custom
     builds like this plugin.
 
     This script compares the deployed files against `Vencord\dist` and restores
@@ -59,6 +59,35 @@ if ($Register) {
     exit 0
 }
 
+function Get-BuildInfo([string]$Dir) {
+    # Rev from the "// Vencord <rev>" header + whether the bridge is compiled in.
+    $info = @{ Rev = ""; HasBridge = $false }
+    $renderer = Join-Path $Dir "vencordDesktopRenderer.js"
+    if (-not (Test-Path $renderer)) { return $info }
+    try {
+        $first = Get-Content $renderer -TotalCount 1 -ErrorAction Stop
+        if ($first -match "Vencord\s+([0-9a-f]{7,40})") { $info.Rev = $Matches[1] }
+        $info.HasBridge = [System.IO.File]::ReadAllText($renderer).Contains("MacroDeckBridge")
+    } catch { }
+    return $info
+}
+
+function Show-Toast([string]$Title, [string]$Message) {
+    # No-module balloon tip: works from the hidden scheduled task (user session).
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $notify = New-Object System.Windows.Forms.NotifyIcon
+        $notify.Icon = [System.Drawing.SystemIcons]::Information
+        $notify.BalloonTipTitle = $Title
+        $notify.BalloonTipText = $Message
+        $notify.Visible = $true
+        $notify.ShowBalloonTip(10000)
+        Start-Sleep -Seconds 11
+        $notify.Dispose()
+    } catch { }
+}
+
 function Write-Log([string]$Message) {
     if ($Quiet) { return }
     try {
@@ -94,6 +123,19 @@ foreach ($f in $files) {
 $pkgPath = Join-Path $Target "package.json"
 $pkgOk = (Test-Path $pkgPath) -and ((Get-Content $pkgPath -Raw).Trim() -eq "{}")
 if ($mismatch.Count -eq 0 -and $pkgOk) { exit 0 }
+
+# Rev drift: Vesktop replaced the build with a NEWER stock Vencord (different
+# rev than our build). Restoring stale files is pointless - Vesktop wipes them
+# again on next boot. Notify instead of restoring.
+$distInfo = Get-BuildInfo $Dist
+$deployedInfo = Get-BuildInfo $Target
+if (-not $deployedInfo.HasBridge -and $deployedInfo.Rev -ne "" -and $deployedInfo.Rev -ne $distInfo.Rev) {
+    $msg = "Vesktop updated Vencord to rev {0} (build is {1}). Run setup.ps1 to rebuild - restoring is skipped until then." -f $deployedInfo.Rev, $distInfo.Rev
+    Write-Log ("REV DRIFT: " + $msg)
+    Write-Host $msg
+    Show-Toast "Vesktop Bridge" $msg
+    exit 0
+}
 
 # Restore everything (clear the read-only attribute first in case it was set).
 foreach ($f in $files) {

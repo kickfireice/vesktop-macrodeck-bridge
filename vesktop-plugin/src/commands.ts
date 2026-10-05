@@ -272,11 +272,17 @@ export async function handleCommand(command: string, args: any, ctx: CmdCtx): Pr
       }
       case "increase_user_volume": {
         const m = needArgs(a, ["userId"]); if (m) return m;
-        return { ok: false, code: "UNSUPPORTED", message: "user volume read-back unavailable; use set_user_volume" };
+        const cur = VolumeAdapter.getUserVolume(String(a.userId));
+        if (cur === null) return { ok: false, code: "UNSUPPORTED", message: "user volume read-back unavailable" };
+        const step = Number(a.step ?? 10);
+        return toOutcome(VolumeAdapter.setUserVolume(String(a.userId), cur + (Number.isFinite(step) ? step : 10)));
       }
       case "decrease_user_volume": {
         const m = needArgs(a, ["userId"]); if (m) return m;
-        return { ok: false, code: "UNSUPPORTED", message: "user volume read-back unavailable; use set_user_volume" };
+        const cur = VolumeAdapter.getUserVolume(String(a.userId));
+        if (cur === null) return { ok: false, code: "UNSUPPORTED", message: "user volume read-back unavailable" };
+        const step = Number(a.step ?? 10);
+        return toOutcome(VolumeAdapter.setUserVolume(String(a.userId), cur - (Number.isFinite(step) ? step : 10)));
       }
       case "reset_user_volume": {
         const m = needArgs(a, ["userId"]); if (m) return m;
@@ -284,8 +290,7 @@ export async function handleCommand(command: string, args: any, ctx: CmdCtx): Pr
       }
       case "toggle_user_local_mute": {
         const m = needArgs(a, ["userId"]); if (m) return m;
-        // No reliable read-back of local mute; honest UNSUPPORTED for toggle.
-        return { ok: false, code: "UNSUPPORTED", message: "toggle needs read-back; use set_user_local_mute" };
+        return toOutcome(VolumeAdapter.toggleUserLocalMute(String(a.userId)));
       }
       case "set_user_local_mute": {
         const m = needArgs(a, ["userId", "muted"]); if (m) return m;

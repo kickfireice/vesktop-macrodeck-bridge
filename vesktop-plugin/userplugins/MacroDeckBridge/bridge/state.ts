@@ -11,6 +11,7 @@ import { emptyState, type State, type Guild, type Device } from "./protocol";
 import { buildCapabilities } from "./capabilities";
 import { VoiceAdapter } from "./adapters/voice";
 import { ChannelAdapter, getGuilds } from "./adapters/channel";
+import { getVoiceUsers } from "./adapters/voiceUsers";
 import { StatusAdapter } from "./adapters/status";
 import { VolumeAdapter } from "./adapters/volume";
 import { DeviceAdapter } from "./adapters/device";
@@ -23,7 +24,7 @@ export const PLUGIN_VERSION = "1.0.0";
 const DEBOUNCE_MS = 150;
 const IMMEDIATE_KEYS = new Set([
   "selfMuted", "selfDeafened", "voiceChannelId", "voiceConnected",
-  "selectedTextChannelId", "authenticated", "discordReady",
+  "selectedTextChannelId", "authenticated", "discordReady", "voiceUsers",
 ]);
 
 export type PushSnapshot = (s: State) => void;
@@ -141,6 +142,9 @@ export function buildSnapshot(): State {
     s.outputVolume = VolumeAdapter.getOutputVolume();
   } catch { /* nulls */ }
   try {
+    s.voiceUsers = getVoiceUsers();
+  } catch { s.voiceUsers = []; }
+  try {
     const cur = DeviceAdapter.current();
     s.inputDeviceId = cur.inputId; s.inputDeviceName = cur.inputName;
     s.outputDeviceId = cur.outputId; s.outputDeviceName = cur.outputName;
@@ -200,11 +204,11 @@ export function subscribeAll(onPatch: (patch: Partial<State>, seq: number) => vo
     ["SELF_DEAF_UPDATE", () => ({ selfDeafened: VoiceAdapter.isSelfDeafened() })],
     ["VOICE_STATE_UPDATES", () => {
       const id = VoiceAdapter.currentVoiceChannelId();
-      return { voiceChannelId: id, voiceConnected: !!id, selfMuted: VoiceAdapter.isSelfMuted(), selfDeafened: VoiceAdapter.isSelfDeafened() };
+      return { voiceChannelId: id, voiceConnected: !!id, selfMuted: VoiceAdapter.isSelfMuted(), selfDeafened: VoiceAdapter.isSelfDeafened(), voiceUsers: getVoiceUsers() };
     }],
     ["VOICE_CHANNEL_SELECT", () => {
       const id = VoiceAdapter.currentVoiceChannelId();
-      return { voiceChannelId: id, voiceConnected: !!id };
+      return { voiceChannelId: id, voiceConnected: !!id, voiceUsers: getVoiceUsers() };
     }],
     ["CHANNEL_SELECT", () => ({ selectedTextChannelId: ChannelAdapter.selectedTextChannelId() })],
     ["PRESENCE_UPDATES", () => ({ userStatus: StatusAdapter.getStatus() })],

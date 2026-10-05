@@ -163,15 +163,43 @@ internal static class P
         ActionParameter.Choice(name, opts.Select(o =>
             new ActionParameterOption { Value = o.v, Label = L.T(o.l) }).ToList(),
             L.T(label), defaultValue: dflt);
+    // NOTE: no optionsSourceId on purpose. The host routes DynamicChoice params
+    // WITHOUT a source id to this action's IDynamicOptionsActionDefinition
+    // provider by parameter name (see SDK docs sample). Passing a source id
+    // makes the host resolve it through a registry instead and fail with
+    // "Unknown options source".
     public static ActionParameter VoiceChannel(string param = "channelId") =>
-        ActionParameter.DynamicChoice(param, L.T("Voice channel"),
-            L.T("Pick a voice/stage channel (ID preferred)."), "voice-channels", required: false);
+        Dyn(ActionParameter.DynamicChoice(param, L.T("Voice channel"),
+            L.T("Pick a voice/stage channel (ID preferred)."), required: false));
     public static ActionParameter TextChannel(string param = "channelId") =>
-        ActionParameter.DynamicChoice(param, L.T("Text channel"),
-            L.T("Pick a text channel (ID preferred)."), "text-channels", required: false);
+        Dyn(ActionParameter.DynamicChoice(param, L.T("Text channel"),
+            L.T("Pick a text channel (ID preferred)."), required: false));
     public static ActionParameter Device(string param, string label, string source) =>
-        ActionParameter.DynamicChoice(param, L.T(label),
-            L.T("Pick a device (ID preferred)."), source, required: false);
+        Dyn(ActionParameter.DynamicChoice(param, L.T(label),
+            L.T("Pick a device (ID preferred)."), required: false));
+    public static ActionParameter Guild(string param = "guildId") =>
+        Dyn(ActionParameter.DynamicChoice(param, L.T("Server"),
+            L.T("Pick the Discord server first - the channel list follows it."), required: false));
+    public static ActionParameter User(string param = "userId", bool required = true) =>
+        Dyn(ActionParameter.DynamicChoice(param, L.T("User"),
+            L.T("Pick a user in your voice call (or type an ID)."), required: required));
+
+    /// The DynamicChoice factory leaves DynamicOptions=false, and the host
+    /// only calls the action's IDynamicOptionsActionDefinition provider when
+    /// the flag is set - otherwise it reports "Unknown options source".
+    private static ActionParameter Dyn(ActionParameter p) => new()
+    {
+        Name = p.Name,
+        Type = p.Type,
+        Label = p.Label,
+        Description = p.Description,
+        Placeholder = p.Placeholder,
+        Required = p.Required,
+        AllowSelf = p.AllowSelf,
+        WidgetTypes = p.WidgetTypes,
+        DynamicOptions = true,
+        OptionsSourceId = p.OptionsSourceId,
+    };
 
     public static JsonObject Args(params (string k, JsonNode? v)[] pairs)
     {

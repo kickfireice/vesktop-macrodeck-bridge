@@ -28,11 +28,12 @@
     powershell -ExecutionPolicy Bypass -File .\setup.ps1 -CheckOnly
     Verify only; changes nothing.
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\setup.ps1 -VencordRev b52ed36 -RegisterWatchdog
+    powershell -ExecutionPolicy Bypass -File .\setup.ps1 -VencordRev 3374b8a -RegisterWatchdog
+    (omit -VencordRev to auto-detect it from the deployed build)
 #>
 [CmdletBinding()]
 param(
-    [string]$VencordRev = "b52ed36",
+    [string]$VencordRev = "auto",
     [string]$VencordDir = "",
     [string]$Target = "",
     [switch]$SkipMacroDeck,
@@ -101,6 +102,19 @@ function Get-RendererInfo([string]$Path) {
     return $result
 }
 
+function Resolve-VencordRev {
+    # "auto" (default): use whatever rev Vesktop currently ships, read from the
+    # deployed build's header - so a Vesktop update just means re-running setup.
+    if ($VencordRev -ne "auto") { return $VencordRev }
+    $depInfo = Get-RendererInfo (Join-Path $Target "vencordDesktopRenderer.js")
+    if ($depInfo.Rev -ne "") {
+        Say "Auto-detected Vencord rev $($depInfo.Rev) from the deployed build."
+        return $depInfo.Rev
+    }
+    Say "No deployed build found - defaulting to Vencord rev 3374b8a."
+    return "3374b8a"
+}
+
 function Test-Prereqs {
     $ok = $true
     foreach ($cmd in @("git", "node", "pnpm")) {
@@ -145,12 +159,13 @@ function Invoke-CheckOnly {
     Test-Prereqs | Out-Null
 
     Say "-- Vencord checkout --"
+    $wantRev = Resolve-VencordRev
     $checkout = Join-Path $VencordDir ".git"
     if (Test-Path $checkout) {
         try {
             $head = (& git -C $VencordDir rev-parse --short HEAD 2>$null)
-            Say "  checkout rev: $head (expected $VencordRev)"
-            if ($head -ne $VencordRev) { Fail "Vencord checkout is $head, expected $VencordRev - re-run setup to rebuild." }
+            Say "  checkout rev: $head (expected $wantRev)"
+            if ($head -ne $wantRev) { Fail "Vencord checkout is $head, expected $wantRev - re-run setup to rebuild." }
         } catch { Fail "Cannot read Vencord checkout rev." }
     } else {
         Fail "No Vencord checkout at $VencordDir - run setup without -CheckOnly to clone it."
@@ -221,6 +236,7 @@ if (-not $SkipMacroDeck) {
 
 if (-not $SkipVesktop) {
     Say "-- Vesktop client plugin --"
+    $VencordRev = Resolve-VencordRev
     if (-not (Test-Path (Join-Path $VencordDir ".git"))) {
         Say "Cloning Vencord (build dependency, gitignored) ..."
         & git clone $VencordRepoUrl $VencordDir

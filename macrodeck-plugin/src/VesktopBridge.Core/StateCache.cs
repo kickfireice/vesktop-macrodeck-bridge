@@ -84,6 +84,7 @@ public sealed class BridgeStateCache
             _lastSeq = 0;
             _live = true;
         }
+        BridgeDiagnostics.Snapshot();
         Notify(changed);
     }
 
@@ -211,6 +212,7 @@ public sealed class ChannelDeviceCache
             _lastChannelSeq = seq;
             _guilds = guilds;
         }
+        BridgeDiagnostics.ChannelList(guilds.SelectMany(g => g.Channels).Count());
         Notify();
     }
 
@@ -223,6 +225,7 @@ public sealed class ChannelDeviceCache
     public void UpdateDevices(List<DeviceInfo> inputs, List<DeviceInfo> outputs)
     {
         lock (_gate) { _inputs = inputs; _outputs = outputs; }
+        BridgeDiagnostics.DeviceList(inputs.Count + outputs.Count);
         Notify();
     }
 

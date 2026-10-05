@@ -64,6 +64,46 @@ public sealed class CommandDispatcher
     public async Task<CommandOutcome> SendAsync(string command,
         JsonObject? args = null, CancellationToken ct = default)
     {
+        var outcome = await SendAsyncInner(command, args, ct);
+        // First-click forgiveness: a NOT_CONNECTED usually means Vesktop is
+        // mid-reconnect (restart/resync window). If its process is alive, wait
+        // briefly for the session instead of failing the button press, then
+        // retry exactly once. Fail fast when Vesktop isn't running at all.
+        if (!outcome.Ok && outcome.ErrorCode == BridgeProtocol.Errors.NotConnected)
+        {
+            if (await WaitForConnectionAsync(TimeSpan.FromSeconds(8), ct))
+                outcome = await SendAsyncInner(command, args, ct);
+        }
+        try { BridgeDiagnostics.Command(command, outcome.Ok, outcome.ErrorCode, IsConnected); }
+        catch { /* diagnostics never break commands */ }
+        return outcome;
+    }
+
+    /// Waits (bounded) for a live Vesktop session. Returns immediately when
+    /// already connected, or fast-false when no Vesktop process exists.
+    public async Task<bool> WaitForConnectionAsync(TimeSpan timeout, CancellationToken ct = default)
+    {
+        if (IsConnected) return true;
+        if (!IsVesktopProcessRunning()) return false;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            try { await Task.Delay(250, ct); } catch { return false; }
+            if (IsConnected) return true;
+            if (!IsVesktopProcessRunning()) return false;
+        }
+        return IsConnected;
+    }
+
+    private static bool IsVesktopProcessRunning()
+    {
+        try { return System.Diagnostics.Process.GetProcessesByName("vesktop").Length > 0; }
+        catch { return true; } // unknown - assume present, let the timeout decide
+    }
+
+    private async Task<CommandOutcome> SendAsyncInner(string command,
+        JsonObject? args = null, CancellationToken ct = default)
+    {
         var blocked = PreCheck(command);
         if (blocked is not null)
         {

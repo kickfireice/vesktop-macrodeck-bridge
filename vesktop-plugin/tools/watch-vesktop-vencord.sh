@@ -102,6 +102,19 @@ fi
 
 if [ -z "$mismatch" ] && [ "$pkg_ok" -eq 1 ]; then exit 0; fi
 
+# Rev drift: Vesktop replaced the build with a NEWER stock Vencord (different
+# rev than our build). Restoring stale files is pointless - Vesktop wipes them
+# again on next boot. Log it (journalctl/cron mail) instead of restoring.
+dist_rev="$(head -n1 "$DIST/vencordDesktopRenderer.js" 2>/dev/null | grep -o 'Vencord [0-9a-f]\{7,40\}' | awk '{print $2}')"
+deployed_has_bridge=0
+grep -q "MacroDeckBridge" "$TARGET/vencordDesktopRenderer.js" 2>/dev/null && deployed_has_bridge=1
+deployed_rev="$(head -n1 "$TARGET/vencordDesktopRenderer.js" 2>/dev/null | grep -o 'Vencord [0-9a-f]\{7,40\}' | awk '{print $2}')"
+if [ "$deployed_has_bridge" -eq 0 ] && [ -n "$deployed_rev" ] && [ "$deployed_rev" != "$dist_rev" ]; then
+    log_msg "REV DRIFT: Vesktop updated Vencord to rev $deployed_rev (build is $dist_rev). Re-run setup.sh to rebuild - restoring is skipped until then."
+    echo "Vesktop updated Vencord to rev $deployed_rev (build is $dist_rev). Re-run setup.sh to rebuild."
+    exit 0
+fi
+
 # shellcheck disable=SC2086
 for f in $FILES; do
     cp -f "$DIST/$f" "$TARGET/$f"

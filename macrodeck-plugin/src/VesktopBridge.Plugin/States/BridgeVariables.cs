@@ -12,17 +12,20 @@ namespace DeckBridge.Plugin;
 
 internal static class BridgeVariables
 {
+    // NOTE: Eager(name) keys the variable by name ("vesktop-..."); Id must be
+    // the SAME full key. (An earlier revision overrode Id with the short id,
+    // so the host's reads never matched and every variable showed Unavailable.)
     private static VariableDefinition TextVar(string id, string display) =>
         VariableDefinition.Eager($"vesktop-{id}", VariableType.Text) with
-        { Id = id, DisplayName = LocalizedText.FromLiteral(display) };
+        { Id = $"vesktop-{id}", DisplayName = LocalizedText.FromLiteral(display) };
 
     private static VariableDefinition BoolVar(string id, string display) =>
         VariableDefinition.Eager($"vesktop-{id}", VariableType.Boolean) with
-        { Id = id, DisplayName = LocalizedText.FromLiteral(display) };
+        { Id = $"vesktop-{id}", DisplayName = LocalizedText.FromLiteral(display) };
 
     private static VariableDefinition NumVar(string id, string display, string? unit = null) =>
         VariableDefinition.Eager($"vesktop-{id}", VariableType.Numeric) with
-        { Id = id, DisplayName = LocalizedText.FromLiteral(display), Unit = unit ?? "" };
+        { Id = $"vesktop-{id}", DisplayName = LocalizedText.FromLiteral(display), Unit = unit ?? "" };
 
     public static IReadOnlyList<VariableDefinition> Definitions { get; } =
     [
@@ -88,8 +91,14 @@ internal static class BridgeVariables
     /// Returns null when unknown (→ Unavailable). Never throws, never logs secrets.
     public static object? Read(BridgeServer server, string id)
     {
+        // Accept every id form the host may pass ("server-status",
+        // "vesktop-server-status", "vars.vesktop-server-status"); match short.
+        var key = id;
+        var dot = key.LastIndexOf('.');
+        if (dot >= 0) key = key[(dot + 1)..];
+        if (key.StartsWith("vesktop-", StringComparison.Ordinal)) key = key["vesktop-".Length..];
         var st = server.State;
-        return id switch
+        return key switch
         {
             "server-status" => server.Running
                 ? $"running 127.0.0.1:{server.ActualPort}" : "stopped",

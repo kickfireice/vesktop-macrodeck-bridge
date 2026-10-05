@@ -1,6 +1,6 @@
 // VoiceTextStageActions.cs — voice / text / stage groups.
-// Dropdowns via IDynamicOptionsActionDefinition (optionsSourceIds
-// "voice-channels" / "text-channels"); plain ID/name/path text params always
+// Dropdowns via IDynamicOptionsActionDefinition (no optionsSourceId -
+// the host routes by parameter name); plain ID/name/path text params always
 // available as fallback. Names are passed through verbatim — ambiguous names
 // are the client's AMBIGUOUS error, never a local guess (§6.1).
 using MacroDeck.Localization;
@@ -11,64 +11,94 @@ namespace DeckBridge.Plugin.Actions;
 
 internal sealed class VoiceJoinOptions(BridgeService b, string id, string name, string command,
     Func<IReadOnlyDictionary<string, object>, System.Text.Json.Nodes.JsonObject?> args)
-    : BridgeCommandAction(b, id, name, "Join a voice channel. Prefer the dropdown (ID); name/path on ambiguity → error with candidates.",
-        command, [P.VoiceChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path (Guild / Category / Channel)", false)], args),
+    : BridgeCommandAction(b, id, name, "Join a voice channel. Pick the server, then the channel (ID is filled in); or type ID/name/path manually.",
+        command, [P.Guild(), P.VoiceChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path (Guild / Category / Channel)", false)], args),
     IDynamicOptionsActionDefinition
 {
     public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
         DynamicOptionsContext context, CancellationToken cancellationToken)
-        => Task.FromResult(ChannelOptions.Voice(BridgeSvc));
+        => Task.FromResult(ChannelOptions.For(BridgeSvc, context, voice: true));
 }
 
 internal sealed class VoiceMoveOptions(BridgeService b, string id, string name, string command,
     Func<IReadOnlyDictionary<string, object>, System.Text.Json.Nodes.JsonObject?> args)
-    : BridgeCommandAction(b, id, name, "Move to another voice channel. Prefer the dropdown (ID).",
-        command, [P.VoiceChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path", false)], args),
+    : BridgeCommandAction(b, id, name, "Move to another voice channel. Pick the server, then the channel.",
+        command, [P.Guild(), P.VoiceChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path", false)], args),
     IDynamicOptionsActionDefinition
 {
     public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
         DynamicOptionsContext context, CancellationToken cancellationToken)
-        => Task.FromResult(ChannelOptions.Voice(BridgeSvc));
+        => Task.FromResult(ChannelOptions.For(BridgeSvc, context, voice: true));
 }
 
 internal sealed class TextSelectOptions(BridgeService b, string id, string name, string command,
     Func<IReadOnlyDictionary<string, object>, System.Text.Json.Nodes.JsonObject?> args)
-    : BridgeCommandAction(b, id, name, "Select a text channel. Prefer the dropdown (ID).",
-        command, [P.TextChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path", false)], args),
+    : BridgeCommandAction(b, id, name, "Select a text channel. Pick the server, then the channel.",
+        command, [P.Guild(), P.TextChannel(), P.Text("name", "Name", false), P.Text("guildName", "Guild name", false), P.Text("path", "Path", false)], args),
     IDynamicOptionsActionDefinition
 {
     public Task<DynamicOptionsResult> GetDynamicOptionsAsync(
         DynamicOptionsContext context, CancellationToken cancellationToken)
-        => Task.FromResult(ChannelOptions.Text(BridgeSvc));
+        => Task.FromResult(ChannelOptions.For(BridgeSvc, context, voice: false));
+}
+
+/// Guild-name arg: explicit text wins; otherwise resolve the picked server
+/// dropdown (guildId) to its name from the channel cache, so typing a
+/// channel name is automatically scoped to the chosen server.
+internal static class GuildArgs
+{
+    public static System.Text.Json.Nodes.JsonNode? Name(
+        BridgeService b, IReadOnlyDictionary<string, object> p)
+    {
+        var explicitName = ParamRead.Str(p, "guildName");
+        if (!string.IsNullOrEmpty(explicitName)) return P.V(explicitName);
+        var gid = ParamRead.Str(p, "guildId");
+        if (string.IsNullOrEmpty(gid)) return null;
+        try { return P.V(b.Server?.Lists.Guilds.FirstOrDefault(g => g.Id == gid)?.Name); }
+        catch { return null; }
+    }
 }
 
 internal static class ChannelOptions
-{
-    public static DynamicOptionsResult Voice(BridgeService b)
+{    private static DynamicOptionsResult Err(string message) => new()
+    { Error = L.T(message), Options = [], AllowsCustomValue = true };
+
+    private static string GuildFilter(DynamicOptionsContext? ctx)
     {
-        var list = b.Server?.Lists;
-        if (list is null)
-            return new DynamicOptionsResult
-            { Error = L.T("Bridge not running"), Options = [], AllowsCustomValue = true };
-        var opts = list.Guilds
-            .SelectMany(g => g.Channels.Where(c => c.Type is "voice" or "stage")
-                .Select(c => new ActionParameterOption
-                { Value = c.Id, Label = L.T($"{g.Name} / {c.Name}") }))
-            .Take(200).ToList();
-        return new DynamicOptionsResult
-        { Options = opts, AllowsCustomValue = true, CacheSeconds = 5 };
+        try
+        {
+            if (ctx?.CurrentParameters is IReadOnlyDictionary<string, object?> d &&
+                d.TryGetValue("guildId", out var v))
+                return v?.ToString() ?? "";
+        }
+        catch { /* never crash the editor */ }
+        return "";
     }
 
-    public static DynamicOptionsResult Text(BridgeService b)
+    public static DynamicOptionsResult For(BridgeService b, DynamicOptionsContext ctx, bool voice)
     {
-        var list = b.Server?.Lists;
-        if (list is null)
+        BridgeDiagnostics.OptionsRequest(ctx?.ParameterName ?? "-");
+        var server = b.Server;
+        if (server is null) return Err("Bridge not running");
+        if (server.ActiveClient is null) return Err("Vesktop not connected - open Vesktop and wait for login");
+        var guilds = server.Lists.Guilds;
+        if (guilds.Count == 0) return Err("No servers received yet - check the Vesktop connection, then reopen this list");
+        if ((ctx?.ParameterName ?? "") == "guildId")
             return new DynamicOptionsResult
-            { Error = L.T("Bridge not running"), Options = [], AllowsCustomValue = true };
-        var opts = list.Guilds
-            .SelectMany(g => g.Channels.Where(c => c.Type == "text")
+            {
+                Options = guilds.Select(g => new ActionParameterOption
+                    { Value = g.Id, Label = L.T(g.Name) }).Take(200).ToList(),
+                AllowsCustomValue = false,
+                CacheSeconds = 5,
+            };
+        var filter = GuildFilter(ctx);
+        var scope = string.IsNullOrEmpty(filter) ? guilds : guilds.Where(g => g.Id == filter).ToList();
+        var opts = scope
+            .SelectMany(g => g.Channels.Where(c => voice
+                ? c.Type is "voice" or "stage"
+                : c.Type == "text")
                 .Select(c => new ActionParameterOption
-                { Value = c.Id, Label = L.T($"{g.Name} / #{c.Name}") }))
+                { Value = c.Id, Label = L.T($"{g.Name} / {(voice ? "" : "#")}{c.Name}") }))
             .Take(200).ToList();
         return new DynamicOptionsResult
         { Options = opts, AllowsCustomValue = true, CacheSeconds = 5 };
@@ -89,7 +119,7 @@ internal static class VoiceActions
         yield return new VoiceJoinOptions(b, "join-voice-by-name", "Join Voice by Name",
             BridgeProtocol.Commands.JoinVoiceByName,
             p => Req(p, "name", "channel name",
-                P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", Opt(p, "guildName")))));
+                P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", GuildArgs.Name(b, p)))));
         yield return new VoiceJoinOptions(b, "join-voice-by-path", "Join Voice by Path",
             BridgeProtocol.Commands.JoinVoiceByPath,
             p => Req(p, "path", "channel path",
@@ -105,7 +135,7 @@ internal static class VoiceActions
         yield return new VoiceMoveOptions(b, "move-voice-by-name", "Move Voice by Name",
             BridgeProtocol.Commands.MoveVoiceByName,
             p => Req(p, "name", "channel name",
-                P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", Opt(p, "guildName")))));
+                P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", GuildArgs.Name(b, p)))));
         yield return new VoiceMoveOptions(b, "move-voice-by-path", "Move Voice by Path",
             BridgeProtocol.Commands.MoveVoiceByPath,
             p => Req(p, "path", "channel path", P.Args(("path", P.V(ParamRead.Str(p, "path"))))));
@@ -145,7 +175,7 @@ internal static class TextActions
             p => Need(p, P.Args(("channelId", P.V(ParamRead.Str(p, "channelId"))))));
         yield return new TextSelectOptions(b, "select-text-by-name", "Select Text by Name",
             BridgeProtocol.Commands.SelectTextByName,
-            p => Need(p, P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", OptN(p, "guildName")))));
+            p => Need(p, P.Args(("name", P.V(ParamRead.Str(p, "name"))), ("guildName", GuildArgs.Name(b, p)))));
         yield return new TextSelectOptions(b, "select-text-by-path", "Select Text by Path",
             BridgeProtocol.Commands.SelectTextByPath,
             p => Need(p, P.Args(("path", P.V(ParamRead.Str(p, "path"))))));

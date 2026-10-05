@@ -1,28 +1,66 @@
 /** adapters/volume.ts — VolumeAdapter: in/out + per-user + attenuation. Ranges per §6. */
-import { tryFind } from "./discovery";
+import { tryFind, tryStore } from "./discovery";
 import { clampVolume } from "../errors";
 
 function mediaEngine(): any | null {
-  return tryFind("MediaEngine-volume",
+  return tryStore("MediaEngine-volume", ["MediaEngineStore"],
     ["getInputVolume", "setInputVolume"],
     ["getOutputVolume", "setOutputVolume"]);
 }
 function userVolumeStore(): any | null {
-  return tryFind("UserVolumeStore",
+  return tryStore("UserVolumeStore", ["UserVolumeStore"],
     ["getUserVolume", "setUserVolume"],
     ["getLocalVolume", "setLocalVolume"]);
+}
+
+/** MediaEngineStore holds per-user local volumes/mutes (localVolumes/localMutes maps). */
+function engineStore(): any | null {
+  return tryStore("MediaEngineStore-volumes", ["MediaEngineStore"]);
+}
+
+function pickFn(obj: any, names: string[]): ((...a: any[]) => unknown) | null {
+  for (const n of names) {
+    if (obj && typeof obj[n] === "function") return obj[n].bind(obj);
+  }
+  return null;
+}
+
+function readLocalVolume(userId: string): number | null {
+  try {
+    const me = engineStore() ?? mediaEngine();
+    const entry = me?.localVolumes?.[userId];
+    const v = entry?.volume ?? entry;
+    if (typeof v === "number" && !Number.isNaN(v)) return v;
+  } catch { /* fall through */ }
+  return null;
+}
+
+function readLocalMute(userId: string): boolean | null {
+  try {
+    const me = engineStore() ?? mediaEngine();
+    const lm = me?.localMutes;
+    if (lm && userId in lm) return !!lm[userId];
+    const fn = pickFn(me, ["isLocalMute"]);
+    if (fn) { try { return !!fn(userId); } catch { /* fall through */ } }
+  } catch { /* fall through */ }
+  return null;
 }
 
 export function volumeAvailability() {
   const me = mediaEngine(); const uv = userVolumeStore();
   const inputVolume = !!me; const outputVolume = !!me;
-  const perUserVolume = !!uv; const userLocalMute = !!uv;
+  const eng = engineStore() ?? me;
+  const canLocalVol = !!(eng && (typeof eng.setLocalVolume === "function" || eng.localVolumes)) || !!uv;
+  const canLocalMute = !!(eng && (typeof eng.setLocalMute === "function" ||
+    typeof eng.toggleLocalMute === "function" || eng.localMutes)) || !!uv;
+  const perUserVolume = canLocalVol; const userLocalMute = canLocalMute;
   // Attenuation settings live in UserSettingsProtoStore in most builds.
-  const us: any = tryFind("UserSettings-attenuation", ["getAttenuation"]);
+  const us: any = tryStore("UserSettings-attenuation", ["UserSettingsProtoStore"], ["getAttenuation"]);
   const attenuation = !!(us || me);
   const reasons: Record<string, string> = {};
   if (!me) { reasons.inputVolume = "INTERNAL_ERROR: MediaEngine"; reasons.outputVolume = "INTERNAL_ERROR: MediaEngine"; }
-  if (!uv) { reasons.perUserVolume = "INTERNAL_ERROR: UserVolumeStore"; reasons.userLocalMute = "INTERNAL_ERROR: UserVolumeStore"; }
+  if (!perUserVolume) { reasons.perUserVolume = "INTERNAL_ERROR: per-user volume"; reasons.userLocalMute = "INTERNAL_ERROR: per-user volume"; }
+  if (!userLocalMute) { reasons.userLocalMute = "INTERNAL_ERROR: local mute"; }
   if (!attenuation) reasons.attenuation = "INTERNAL_ERROR: attenuation settings";
   return { inputVolume, outputVolume, perUserVolume, userLocalMute, attenuation, reasons };
 }
@@ -67,23 +105,57 @@ export const VolumeAdapter = {
   setUserVolume(userId: string, v: number) {
     const c = clampVolume("user", v); if (c === null) return { ok: false, code: "SCHEMA_INVALID", message: "volume 0-200" };
     try {
+      const me = engineStore() ?? mediaEngine();
+      const set = pickFn(me, ["setLocalVolume"]);
+      if (set) { set(userId, c); return { ok: true }; }
       const uv = userVolumeStore();
-      if (!uv) return { ok: false, code: "UNSUPPORTED", message: "per-user volume unavailable" };
-      if (typeof uv.setUserVolume === "function") { uv.setUserVolume(userId, c); return { ok: true }; }
-      if (typeof uv.setLocalVolume === "function") { uv.setLocalVolume(userId, c); return { ok: true }; }
+      if (!uv && !me) return { ok: false, code: "UNSUPPORTED", message: "per-user volume unavailable" };
+      if (uv && typeof uv.setUserVolume === "function") { uv.setUserVolume(userId, c); return { ok: true }; }
+      if (uv && typeof uv.setLocalVolume === "function") { uv.setLocalVolume(userId, c); return { ok: true }; }
       return { ok: false, code: "UNSUPPORTED", message: "no per-user setter in this build" };
     } catch (e: any) { return { ok: false, code: "INTERNAL_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
   },
   resetUserVolume(userId: string) { return VolumeAdapter.setUserVolume(userId, 100); },
-  setUserLocalMute(userId: string, muted: boolean) {
+  getUserVolume(userId: string): number | null {
+    const v = readLocalVolume(userId);
+    if (v !== null) return v;
     try {
       const uv = userVolumeStore();
-      if (!uv) return { ok: false, code: "UNSUPPORTED", message: "local mute unavailable" };
-      if (typeof uv.setUserLocalMute === "function") { uv.setUserLocalMute(userId, muted); return { ok: true }; }
-      if (typeof uv.toggleLocalMute === "function" && muted) { uv.toggleLocalMute(userId); return { ok: true }; }
+      for (const n of ["getUserVolume", "getLocalVolume"]) {
+        try {
+          if (uv && typeof uv[n] === "function") {
+            const r = uv[n](userId);
+            if (typeof r === "number" && !Number.isNaN(r)) return r;
+          }
+        } catch { /* next */ }
+      }
+    } catch { /* fall through */ }
+    return null;
+  },
+  setUserLocalMute(userId: string, muted: boolean) {
+    try {
+      const me = engineStore() ?? mediaEngine();
+      const set = pickFn(me, ["setLocalMute", "setLocalMuted", "toggleLocalMute"]);
+      if (set) {
+        // toggle-style setters take only the user: call only when a change is needed.
+        if (/toggle/i.test(String((set as any).name ?? ""))) {
+          if (muted !== (readLocalMute(userId) ?? !muted)) set(userId);
+          return { ok: true };
+        }
+        set(userId, muted); return { ok: true };
+      }
+      const uv = userVolumeStore();
+      if (!uv && !me) return { ok: false, code: "UNSUPPORTED", message: "local mute unavailable" };
+      if (uv && typeof uv.setUserLocalMute === "function") { uv.setUserLocalMute(userId, muted); return { ok: true }; }
+      if (uv && typeof uv.toggleLocalMute === "function" && muted) { uv.toggleLocalMute(userId); return { ok: true }; }
       // Fallback: volume 0 ≈ muted (honest, still reported as mute attempt).
       if (muted) return VolumeAdapter.setUserVolume(userId, 0);
       return { ok: false, code: "UNSUPPORTED", message: "no local-mute setter in this build" };
     } catch (e: any) { return { ok: false, code: "INTERNAL_ERROR", message: String(e?.message ?? e).slice(0, 120) }; }
+  },
+  toggleUserLocalMute(userId: string) {
+    const cur = readLocalMute(userId);
+    if (cur === null) return { ok: false, code: "UNSUPPORTED", message: "local-mute read-back unavailable" };
+    return VolumeAdapter.setUserLocalMute(userId, !cur);
   },
 };

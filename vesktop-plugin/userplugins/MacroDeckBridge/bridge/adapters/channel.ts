@@ -2,15 +2,18 @@
  * adapters/channel.ts — ChannelAdapter: guild/channel lists + text/voice select.
  * Path format: "Guild / Category / Channel" (§7). Ambiguous → candidates(max 10).
  */
-import { tryFind } from "./discovery";
+import { tryFind, tryStore } from "./discovery";
 import type { Guild, ChannelNode } from "../protocol";
 import { log } from "../logger";
 
 function channelStore(): any | null {
-  return tryFind("ChannelStore", ["getChannel", "getAllChannels"], ["getDMChannels"]);
+  return tryStore("ChannelStore", ["ChannelStore"], ["getChannel", "getAllChannels"], ["getDMChannels"]);
+}
+function guildChannelStore(): any | null {
+  return tryStore("GuildChannelStore", ["GuildChannelStore"], ["getChannels", "getDefaultChannel"]);
 }
 function guildStore(): any | null {
-  return tryFind("GuildStore", ["getGuild", "getGuilds"], ["getGuildCount"]);
+  return tryStore("GuildStore", ["GuildStore"], ["getGuild", "getGuilds"], ["getGuildCount"]);
 }
 function selectActions(): any | null {
   return tryFind("ChannelSelectActions", ["selectChannel"], ["selectVoiceChannel"]);
@@ -19,8 +22,8 @@ function selectActions(): any | null {
 function norm(s: string) { return (s || "").trim().toLowerCase(); }
 
 export function channelListAvailability(): { channelList: boolean; textChannelSelect: boolean; cycleTextChannel: boolean; markChannelRead: boolean; reason?: string } {
-  const cs = channelStore(); const gs = guildStore();
-  const ok = !!(cs && gs);
+  const cs = channelStore(); const gs = guildStore(); const gcs = guildChannelStore();
+  const ok = !!(gs && (gcs || cs));
   return {
     channelList: ok, textChannelSelect: !!selectActions(),
     cycleTextChannel: !!selectActions(), markChannelRead: !!cs,
@@ -28,27 +31,52 @@ export function channelListAvailability(): { channelList: boolean; textChannelSe
   };
 }
 
+/**
+ * Channels of one guild. Preferred: GuildChannelStore.getChannels(gid) ->
+ * { SELECTABLE: [...], VOCAL: [...] } (shape Vencord's own plugins use).
+ * Legacy fallbacks: ChannelStore.getAllChannels / getChannels.
+ */
+function channelsForGuild(cs: any, gcs: any, gid: string): any[] {
+  // GuildChannelStore entries are sorted-collection wrappers {channel, comparator}.
+  const unwrap = (x: any) => (x && typeof x === "object" && "channel" in x ? x.channel : x);
+  try {
+    if (gcs && typeof gcs.getChannels === "function") {
+      const grouped: any = gcs.getChannels(gid);
+      if (grouped) {
+        const sel = Array.isArray(grouped.SELECTABLE) ? grouped.SELECTABLE : [];
+        const voc = Array.isArray(grouped.VOCAL) ? grouped.VOCAL : [];
+        if (sel.length || voc.length) return [...sel, ...voc].map(unwrap);
+        const flat = Object.values(grouped).filter(Array.isArray).flat();
+        if (flat.length) return (flat as any[]).map(unwrap);
+      }
+    }
+  } catch { /* fall through to legacy */ }
+  try {
+    if (cs && typeof cs.getAllChannels === "function") {
+      const all = cs.getAllChannels();
+      const arr = Array.isArray(all) ? all.filter((c: any) => String(c?.guild_id ?? c?.guildId ?? "") === gid)
+        : Object.values(all?.[gid]?.channels ?? all?.[gid] ?? {});
+      if (arr.length) return arr;
+    }
+    if (cs && typeof cs.getChannels === "function") {
+      const arr = Object.values(cs.getChannels(gid) ?? {});
+      if (arr.length) return arr;
+    }
+  } catch { /* fall through */ }
+  return [];
+}
+
 /** Best-effort guild/channel dump. Returns [] (not throw) when stores missing. */
 export function getGuilds(): Guild[] {
   try {
-    const cs = channelStore(); const gs = guildStore();
-    if (!cs || !gs) return [];
+    const cs = channelStore(); const gs = guildStore(); const gcs = guildChannelStore();
+    if (!gs) return [];
     const guilds: any = typeof gs.getGuilds === "function" ? gs.getGuilds() : gs.getGuilds;
     const guildArray: any[] = Array.isArray(guilds) ? guilds : Object.values(guilds ?? {});
     const out: Guild[] = [];
     for (const g of guildArray.slice(0, 200)) {
       const gid = String(g?.id ?? ""); const gname = String(g?.name ?? "Unknown Guild");
-      let channels: any[] = [];
-      try {
-        if (typeof cs.getAllChannels === "function") {
-          const all = cs.getAllChannels();
-          // Shape varies: {guildId: {channels}} or flat. Handle common case.
-          channels = Array.isArray(all) ? all.filter((c: any) => String(c?.guild_id ?? c?.guildId ?? "") === gid)
-            : Object.values(all?.[gid]?.channels ?? all?.[gid] ?? {});
-        } else if (typeof cs.getChannels === "function") {
-          channels = Object.values(cs.getChannels(gid) ?? {});
-        }
-      } catch { channels = []; }
+      const channels: any[] = channelsForGuild(cs, gcs, gid);
       const nodes: ChannelNode[] = [];
       const cats = new Map<string, string>();
       for (const c of channels) {
@@ -131,14 +159,14 @@ export const ChannelAdapter = {
   getGuilds, resolveById, resolveByName, resolveByPath, channelListAvailability,
   selectedTextChannelId(): string | null {
     try {
-      const sel: any = tryFind("SelectedChannelStore-text", ["getCurrentlySelectedChannelId"]);
+      const sel: any = tryStore("SelectedChannelStore", ["SelectedChannelStore"], ["getCurrentlySelectedChannelId"]);
       if (sel?.getCurrentlySelectedChannelId) return sel.getCurrentlySelectedChannelId() ?? null;
       return null;
     } catch { return null; }
   },
   selectedGuildId(): string | null {
     try {
-      const sel: any = tryFind("SelectedGuildStore", ["getGuildId"]);
+      const sel: any = tryStore("SelectedGuildStore", ["SelectedGuildStore"], ["getGuildId"]);
       if (sel?.getGuildId) return sel.getGuildId() ?? null;
       return null;
     } catch { return null; }

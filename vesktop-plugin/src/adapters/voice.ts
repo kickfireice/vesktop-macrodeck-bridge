@@ -2,7 +2,7 @@
  * adapters/voice.ts — VoiceAdapter: mute/deafen/speaker + join/leave/move voice.
  * Safe discovery; every method returns {ok} or {ok:false,code} — never throws.
  */
-import { getDispatcher, tryFind, tryFindStore } from "./discovery";
+import { getDispatcher, tryFind, tryFindStore, tryStore } from "./discovery";
 import { log } from "../logger";
 
 export interface OpResult { ok: boolean; code?: string; message?: string; patch?: Record<string, unknown>; }
@@ -161,7 +161,7 @@ export const VoiceAdapter = {
   },
   currentVoiceChannelId(): string | null {
     try {
-      const sel: any = tryFind("SelectedChannelStore", ["getVoiceChannelId"], ["getCurrentlySelectedChannel"]);
+      const sel: any = tryStore("SelectedChannelStore", ["SelectedChannelStore"], ["getVoiceChannelId"], ["getCurrentlySelectedChannel"]);
       if (sel?.getVoiceChannelId) return sel.getVoiceChannelId() ?? null;
       return null;
     } catch { return null; }

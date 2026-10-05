@@ -1,5 +1,5 @@
 /** adapters/status.ts — StatusAdapter: presence + custom status. */
-import { tryFind } from "./discovery";
+import { tryFind, tryStore } from "./discovery";
 import { log } from "../logger";
 
 export type StatusValue = "online" | "idle" | "dnd" | "invisible" | "unknown";
@@ -36,7 +36,7 @@ function setStatusRaw(status: Exclude<StatusValue, "unknown">) {
 export const StatusAdapter = {
   getStatus(): StatusValue {
     try {
-      const pres: any = tryFind("PresenceStore", ["getStatus", "getState"]);
+      const pres: any = tryStore("PresenceStore", ["PresenceStore"], ["getStatus", "getState"]);
       if (pres?.getStatus) {
         const s = String(pres.getStatus() ?? "unknown").toLowerCase();
         if (s === "online" || s === "idle" || s === "dnd" || s === "invisible") return s;
@@ -46,7 +46,7 @@ export const StatusAdapter = {
   },
   getCustomStatus(): { text: string | null; emojiName: string | null } {
     try {
-      const us: any = tryFind("UserSettingsProtoStore",
+      const us: any = tryStore("UserSettingsProtoStore", ["UserSettingsProtoStore"],
         ["getCustomStatus"], ["getLocalStatus"]);
       if (us?.getCustomStatus) {
         const c = us.getCustomStatus();

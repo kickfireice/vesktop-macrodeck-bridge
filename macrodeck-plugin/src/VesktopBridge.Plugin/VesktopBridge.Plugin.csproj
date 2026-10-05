@@ -12,9 +12,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="MacroDeck.Plugin.Hosting" Version="3.0.0-preview.10" />
-    <PackageReference Include="MacroDeck.Plugin.Serilog" Version="3.0.0-preview.10" />
-    <PackageReference Include="MacroDeck.Plugin.Analyzers" Version="3.0.0-preview.10" PrivateAssets="all" />
+    <PackageReference Include="MacroDeck.Plugin.Hosting" Version="3.0.0-beta.15" />
+    <PackageReference Include="MacroDeck.Plugin.Serilog" Version="3.0.0-beta.15" />
+    <PackageReference Include="MacroDeck.Plugin.Analyzers" Version="3.0.0-beta.15" PrivateAssets="all" />
     <ProjectReference Include="..\VesktopBridge.Core\VesktopBridge.Core.csproj" />
     <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\icon.png" CopyToOutputDirectory="PreserveNewest" />

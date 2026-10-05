@@ -51,7 +51,9 @@ chmod +x setup.sh && ./setup.sh
 What it does: checks prerequisites (Git, Node, pnpm, .NET 10 SDK),
 builds the Macro Deck plugin, clones Vencord at the matching rev (if needed),
 copies in the `MacroDeckBridge` userplugin, builds it, deploys it to Vesktop,
-points Vesktop at the build, and restarts Vesktop. Re-run with `-CheckOnly`
+points Vesktop at the build, and restarts Vesktop. The Vencord rev auto-detects
+from the deployed build (override with `-VencordRev <rev>`), so after a Vesktop
+update you just re-run setup. Re-run with `-CheckOnly`
 (`--check-only` on Linux) any time to verify the install without changing anything.
 
 > **Linux is untested: NOT TESTED ON LINUX — ONLY TESTED ON WINDOWS 11.**
@@ -94,13 +96,13 @@ Prefer manual steps? They are below. Either way, finish with **pairing**
 
 Vencord plugins are compiled into Vencord at build time, so this half is built rather
 than installed. **The Vencord rev must match the one Vesktop ships**
-(Vesktop 1.6.6 = `b52ed36`). A mismatched build is silently replaced by the stock
+(Vesktop 1.6.6 = `3374b8a`). A mismatched build is silently replaced by the stock
 release on every Vesktop launch, and the plugin vanishes from the list.
 
 ```bash
 git clone https://github.com/Vendicated/Vencord Vencord
 cd Vencord
-git checkout b52ed36                # match Vesktop's shipped rev — if in doubt, check the header of %APPDATA%\Vesktop\vencord\vencordDesktopRenderer.js after a clean launch
+git checkout 3374b8a                # match Vesktop's shipped rev — if in doubt, check the header of %APPDATA%\Vesktop\vencord\vencordDesktopRenderer.js after a clean launch
 cp -r ../vesktop-plugin/userplugins/MacroDeckBridge src/userplugins/
 pnpm install
 pnpm build --standalone
@@ -112,7 +114,9 @@ for you). Restart Vesktop and enable `MacroDeckBridge` in the plugin list.
 
 > Never use Vesktop's **Force Update Vencord** (or `vesktop --repair`) with a custom
 > build — it re-downloads stock Vencord over your directory by design. After any
-> Vesktop update, re-run `.\setup.ps1` to rebuild against the new rev.
+> Vesktop update, re-run `.\setup.ps1` to rebuild against the new rev (the rev
+> auto-detects; the watchdog pops a notification instead of restoring a stale
+> build when it sees Vesktop shipped a newer rev).
 
 ### 3. Pair the two halves (required)
 
@@ -228,14 +232,14 @@ See `vesktop-plugin/README.md` and
   public repository at build time.
 
 All graphics in this repository (`Icon.png`, `AuthorIco.png` and the plugin icon) were
-created by the author.
+created by the author with AI image generation.
 
 ## AI disclosure
 
-This project was developed with AI assistance (code written with AI agents). The plugin
-contains **no AI functionality at runtime**, sends nothing to any AI service, and makes
-no network connections other than loopback. Declared here and in the Macro Deck Creator
-Portal submission, per store guidelines section 9.
+This project was developed with AI assistance (code written with AI agents), and the
+plugin icon is AI-generated. The plugin contains **no AI functionality at runtime**,
+sends nothing to any AI service, and makes no network connections other than loopback.
+Declared here and in the Macro Deck Creator Portal submission, per store guidelines section 9.
 
 ## Issues and contributions
 

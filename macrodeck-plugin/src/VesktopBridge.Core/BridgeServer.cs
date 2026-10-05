@@ -282,6 +282,7 @@ public sealed class BridgeServer : IDisposable
         _pending.FailAll(BridgeProtocol.Errors.InternalError);
         _state.MarkDisconnected(reason);
         BridgeLog.Transition($"client disconnected sid={BridgeLog.Sid8(conn.Sid)} ({reason})");
+        BridgeDiagnostics.Event($"lost {reason}");
         StatusChanged?.Invoke("client-lost");
     }
 
@@ -355,6 +356,7 @@ public sealed class BridgeServer : IDisposable
         }
         conn.Authenticate(created.Sid);
         _client = conn;
+        BridgeDiagnostics.SessionStart();
         _lists.ResetSequences(); // seq restarts per connection (§9.1)
         var welcome = new JsonObject
         {
@@ -367,6 +369,7 @@ public sealed class BridgeServer : IDisposable
         await conn.SendAsync(EnvelopeCodec.Serialize(EnvelopeCodec.Outgoing(
             BridgeProtocol.ServerMsg.Welcome, welcome, EnvelopeCodec.NewId(), e.Id, created.Sid)));
         BridgeLog.Transition($"client connected sid={BridgeLog.Sid8(created.Sid)} name={BridgeLog.Trunc(name, 40)} v={BridgeLog.Trunc(version, 20)}");
+        BridgeDiagnostics.Event($"hello {name}");
         StatusChanged?.Invoke("client-connected");
     }
 
@@ -481,6 +484,7 @@ public sealed class ClientConnection
         {
             4401 => "AUTH_FAILED",
             4409 => "REPLACED_OR_DUPLICATE",
+            4000 => "HEARTBEAT_TIMEOUT",
             _ => "WS_DROP",
         });
     }
@@ -502,7 +506,7 @@ public sealed class ClientConnection
                 if (Authenticated && remaining <= 0)
                 {
                     BridgeLog.Transition($"heartbeat timeout sid={BridgeLog.Sid8(Sid)}");
-                    await CloseAsync("heartbeat timeout");
+                    await CloseAsync("heartbeat timeout", 4000);
                     break;
                 }
                 using var msgCts = CancellationTokenSource.CreateLinkedTokenSource(ct);

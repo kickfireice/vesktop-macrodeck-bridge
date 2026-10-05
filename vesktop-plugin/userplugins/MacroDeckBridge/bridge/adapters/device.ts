@@ -1,10 +1,10 @@
 /** adapters/device.ts — DeviceAdapter: input/output device select + cycle + refresh. */
-import { tryFind } from "./discovery";
+import { tryFind, tryStore } from "./discovery";
 import type { Device } from "../protocol";
 import { log } from "../logger";
 
 function mediaDevices(): any | null {
-  return tryFind("MediaDeviceStore",
+  return tryStore("MediaDeviceStore", ["MediaDeviceStore"],
     ["getInputDevices", "getOutputDevices"],
     ["getDevices", "setInputDevice"],
     ["enumerateDevices"]);

@@ -234,6 +234,7 @@ type State = {
   voiceChannelId: string | null; voiceChannelName: string | null;
   voiceChannelPath: string | null; voiceGuildId: string | null; voiceGuildName: string | null;
   lastVoiceChannelId: string | null; lastVoiceChannelName: string | null;
+  voiceUsers: { id: string; name: string }[]; // users in your current voice call (for user dropdowns)
   // text
   selectedTextChannelId: string | null; selectedTextChannelName: string | null;
   selectedTextChannelPath: string | null; selectedGuildId: string | null; selectedGuildName: string | null;
