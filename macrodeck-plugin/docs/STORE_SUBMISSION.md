@@ -14,7 +14,8 @@ Repository: https://github.com/kickfireice/vesktop-macrodeck-bridge (public, MIT
 - Repository: `https://github.com/kickfireice/vesktop-macrodeck-bridge` (public).
 - Package ID `com.kickfireice.vesktop-bridge` — developer-scoped, no `MacroDeck`
   and no third-party company namespace.
-- `publisher.name`: `kickfireice`; `license`: MIT; `repository`: URL above.
+- `publisher.name`: `Kick Fire` (must match the Store identity; the package ID
+  stays `com.kickfireice.vesktop-bridge`); `license`: MIT; `repository`: URL above.
 
 ## Done
 
