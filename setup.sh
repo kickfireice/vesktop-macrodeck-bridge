@@ -292,12 +292,28 @@ s.vencordDir=process.env.TARGET_DIR;
 fs.writeFileSync(sp,JSON.stringify(s,null,2));'
     say "Set vencordDir in state.json."
 
+    # The watchdog timer stores an ABSOLUTE ExecStart path. If the repo was
+    # moved/renamed, a stale timer keeps pointing at the old location, so
+    # re-running setup must heal it even without --register-watchdog.
     if [ "$REGISTER_WATCHDOG" -eq 1 ]; then
         if [ -f "$WATCH_SCRIPT" ]; then
             say "Registering Vencord watchdog (self-heals stock overwrites) ..."
             "$WATCH_SCRIPT" --register || echo "WARNING: watchdog registration failed." >&2
         else
             echo "WARNING: watchdog script not found: $WATCH_SCRIPT" >&2
+        fi
+    else
+        unit_file="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/macrodeckbridge-watch.service"
+        if [ -f "$unit_file" ]; then
+            if ! grep -qF "ExecStart=$WATCH_SCRIPT" "$unit_file" 2>/dev/null; then
+                say "Watchdog timer points elsewhere (repo moved?) - re-registering at new location ..."
+                say "  new: $WATCH_SCRIPT"
+                if [ -f "$WATCH_SCRIPT" ]; then
+                    "$WATCH_SCRIPT" --register || echo "WARNING: watchdog re-registration failed." >&2
+                else
+                    echo "WARNING: watchdog timer is stale but $WATCH_SCRIPT is missing." >&2
+                fi
+            fi
         fi
     fi
 

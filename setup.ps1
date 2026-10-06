@@ -56,6 +56,8 @@ if (-not $Target) { $Target = Join-Path $env:APPDATA "vesktop\vencord" }
 $RepoPluginSrc = Join-Path $RepoRoot "vesktop-plugin\userplugins\MacroDeckBridge"
 $MacroDeckDir = Join-Path $RepoRoot "macrodeck-plugin"
 $WatchScript = Join-Path $RepoRoot "vesktop-plugin\tools\watch-vesktop-vencord.ps1"
+$WatchVbs = Join-Path $RepoRoot "vesktop-plugin\tools\run-hidden.vbs"
+$WatchTaskName = "MacroDeckBridge Vencord Watchdog"
 $VesktopExe = Join-Path $env:LOCALAPPDATA "vesktop\vesktop.exe"
 $MacroDeckExe = Join-Path $env:LOCALAPPDATA "Macro Deck\MacroDeck.exe"
 $VencordRepoUrl = "https://github.com/Vendicated/Vencord.git"
@@ -113,6 +115,61 @@ function Resolve-VencordRev {
     }
     Say "No deployed build found - defaulting to Vencord rev 3374b8a."
     return "3374b8a"
+}
+
+function Get-WatchdogTaskTarget {
+    # Returns the .vbs path the scheduled watchdog task points at, or $null if
+    # no task is registered. Namespace-agnostic (schtasks XML has a default ns).
+    try {
+        $out = (& schtasks /query /tn $WatchTaskName /xml 2>$null) -join "`n"
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($out)) { return $null }
+        [xml]$doc = $out
+        $argsNode = $doc.GetElementsByTagName("Arguments") | Select-Object -First 1
+        if ($null -eq $argsNode) { return $null }
+        $raw = $argsNode.InnerText.Trim()
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+        # Arguments is just the quoted/unquoted .vbs path (command is wscript.exe).
+        # Take the first quoted token if present, else the first whitespace token.
+        $m = [regex]::Match($raw, '"([^"]+\.vbs)"')
+        if ($m.Success) { return $m.Groups[1].Value }
+        $tok = ($raw -split '\s+')[0].Trim('"')
+        if ($tok -like "*.vbs") { return $tok }
+        return $raw.Trim('"')
+    } catch { return $null }
+}
+
+function Sync-WatchdogTask {
+    # Self-heals a stale watchdog registration (e.g. repo was moved/renamed).
+    # The task stores an ABSOLUTE path to run-hidden.vbs, so moving the repo
+    # without re-registering leaves a task that pops "Can not find script file"
+    # every 5 minutes. Re-running setup must heal it even without -RegisterWatchdog.
+    param([bool]$WantRegister)
+    $existing = Get-WatchdogTaskTarget
+    if ($WantRegister) {
+        if (Test-Path $WatchScript) {
+            Say "Registering Vencord watchdog (self-heals stock overwrites) ..."
+            & powershell -ExecutionPolicy Bypass -File $WatchScript -Register
+        } else {
+            Write-Warning "Watchdog script not found: $WatchScript"
+        }
+        return
+    }
+    if ($null -eq $existing) { return }
+    $normExisting = $existing.Trim().Trim('"')
+    if ($normExisting -ieq $WatchVbs.Trim()) { return }
+    # Task points elsewhere - stale after a move/rename, or from another copy.
+    if (-not (Test-Path $normExisting)) {
+        Say ("Watchdog task points to a missing file (repo moved?):`n  old: $normExisting`n  new: $WatchVbs")
+        Say "Re-registering the watchdog at the new location ..."
+    } else {
+        Say ("Watchdog task points to another copy:`n  task: $normExisting`n  repo: $WatchVbs")
+        Say "Updating the watchdog to this repo copy ..."
+    }
+    if (Test-Path $WatchScript) {
+        & powershell -ExecutionPolicy Bypass -File $WatchScript -Register
+    } else {
+        Fail "Watchdog task is stale but $WatchScript is missing - remove the old task manually: schtasks /delete /tn '$WatchTaskName' /f"
+    }
 }
 
 function Test-Prereqs {
@@ -213,6 +270,17 @@ function Invoke-CheckOnly {
     if ($listening) { Say "  [ok] something is listening on 127.0.0.1:8323" }
     else { Fail "Nothing listening on port 8323 - is the Macro Deck plugin running?" }
 
+    Say "-- watchdog --"
+    $taskTarget = Get-WatchdogTaskTarget
+    if ($null -eq $taskTarget) {
+        Say "  [skip] watchdog scheduled task not registered (opt-in via -RegisterWatchdog)."
+    } elseif ($taskTarget.Trim().Trim('"') -ieq $WatchVbs.Trim()) {
+        if (Test-Path $WatchVbs) { Say "  [ok] watchdog points at this repo copy" }
+        else { Fail "Watchdog task points here but $WatchVbs is missing." }
+    } else {
+        Fail ("Watchdog task is stale (points at {0}, this repo is {1}) - re-run setup (it self-heals) or run the watch script with -Register." -f $taskTarget, $WatchVbs)
+    }
+
     if ($script:Failures.Count -eq 0) { Say "ALL CHECKS PASSED."; exit 0 }
     else { Write-Warning ("{0} check(s) failed." -f $script:Failures.Count); exit 1 }
 }
@@ -289,19 +357,16 @@ if (-not $SkipVesktop) {
     Write-Utf8NoBom $statePath ($state | ConvertTo-Json -Depth 10)
     Say "Set vencordDir in state.json."
 
-    if ($RegisterWatchdog) {
-        if (Test-Path $WatchScript) {
-            Say "Registering Vencord watchdog (self-heals stock overwrites) ..."
-            & powershell -ExecutionPolicy Bypass -File $WatchScript -Register
-        } else {
-            Write-Warning "Watchdog script not found: $WatchScript"
-        }
-    }
+    Sync-WatchdogTask -WantRegister ([bool]$RegisterWatchdog)
 
     if (-not $NoRestart) {
         if (Test-Path $VesktopExe) {
-            Say "Starting Vesktop ..."
-            Start-Process -FilePath $VesktopExe
+            Say "Starting Vesktop (detached - safe to close this window) ..."
+            # Detached launch: cmd's `start` breaks away from this console's job
+            # object, so closing the setup window does NOT kill Vesktop.
+            # (Plain Start-Process keeps Vesktop as a console child - closing the
+            # console then takes Vesktop down with it.)
+            & cmd.exe /c start '""' "`"$VesktopExe`""
             Start-Sleep -Seconds 12
             $after = Get-RendererInfo (Join-Path $Target "vencordDesktopRenderer.js")
             if (-not $after.HasBridge) {

@@ -37,6 +37,9 @@ log_msg() {
 }
 
 do_register() {
+    # NOTE: the unit stores an ABSOLUTE ExecStart path. If you move or rename
+    # the repo folder, re-run with --register (or re-run setup.sh, which
+    # self-heals this) - otherwise the stale timer keeps hitting the old path.
     mkdir -p "$UNIT_DIR"
     cat >"$UNIT_DIR/macrodeckbridge-watch.service" <<EOF
 [Unit]

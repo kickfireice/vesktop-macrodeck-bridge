@@ -50,12 +50,19 @@ if ($Register) {
     # Launch via wscript + run-hidden.vbs (both windowless). A direct
     # powershell.exe task action flashes a console window every run because
     # conhost appears before -WindowStyle Hidden applies.
+    # NOTE: the task stores an ABSOLUTE path to run-hidden.vbs. If you move or
+    # rename the repo folder, re-run with -Register (or re-run setup.ps1, which
+    # self-heals this) - otherwise the stale task pops "Can not find script
+    # file" every 5 minutes.
     $vbs = Join-Path $PSScriptRoot "run-hidden.vbs"
     if (-not (Test-Path $vbs)) { throw "run-hidden.vbs missing next to $PSCommandPath" }
+    # Quote the .vbs path so repo locations with spaces survive schtasks parsing.
     $arg = 'wscript.exe "' + $vbs + '"'
     schtasks /create /tn $taskName /sc MINUTE /mo 5 /tr "$arg" /f | Out-Null
     schtasks /run /tn $taskName | Out-Null
     Write-Host "Registered scheduled task '$taskName' (every 5 minutes, hidden)."
+    Write-Host "  points at: $vbs"
+    Write-Host "  (If you move this repo, re-run with -Register.)"
     exit 0
 }
 
